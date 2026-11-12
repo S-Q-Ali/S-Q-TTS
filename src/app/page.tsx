@@ -13,9 +13,9 @@ import { Sparkles, Loader2, AlertCircle, Volume2, Shield } from "lucide-react";
 
 export default function Home() {
   const [text, setText] = useState<string>(
-    "خوش آمدید! یہ مائیکروسافٹ ایج کا نیورل ٹیکسٹ ٹو اسپیچ انجن ہے جو مکمل طور پر مفت ہے۔"
+    "Welcome to S-Q TTS Studio! Convert your written text into crystal-clear, natural neural speech powered by Microsoft Edge."
   );
-  const [selectedVoice, setSelectedVoice] = useState<string>("ur-PK-UzmaNeural");
+  const [selectedVoice, setSelectedVoice] = useState<string>("en-US-JennyNeural");
   const [rate, setRate] = useState<number>(0);
   const [pitch, setPitch] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0);
@@ -42,7 +42,7 @@ export default function Home() {
         setVoices(data);
       } catch (err: any) {
         console.error("Voices fetch error:", err);
-        setError("Could not load voices list. Using default Urdu neural voice.");
+        setError("Could not load voices list. Using default English neural voice.");
       } finally {
         setLoadingVoices(false);
       }
@@ -67,7 +67,7 @@ export default function Home() {
   // Generate speech handler
   const handleGenerate = async () => {
     if (!text.trim()) {
-      setError("Baraye meherbani text enter karein!");
+      setError("Please enter some text to synthesize!");
       return;
     }
 
@@ -236,7 +236,7 @@ export default function Home() {
               </div>
               <ul className="space-y-1 list-disc list-inside text-slate-400 leading-relaxed">
                 <li>300+ Microsoft Edge Neural Voices across 70+ languages.</li>
-                <li>Native Urdu voices (<code className="text-emerald-400">ur-PK-Uzma</code> & <code className="text-emerald-400">ur-PK-Asad</code>) with natural accent.</li>
+                <li>Native English voices (<code className="text-blue-400">en-US-Jenny</code>, <code className="text-blue-400">en-US-Guy</code>, <code className="text-blue-400">en-GB-Sonia</code>) and Urdu (<code className="text-emerald-400">ur-PK-Uzma</code>, <code className="text-emerald-400">ur-PK-Asad</code>).</li>
                 <li>Direct high-bitrate MP3 download capability.</li>
                 <li>Zero subscriptions, 100% free forever.</li>
               </ul>

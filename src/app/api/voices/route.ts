@@ -29,8 +29,8 @@ export async function GET() {
       status: v.Status,
     }));
 
-    // Prioritize popular languages (Urdu, English, Hindi, Arabic, Spanish, French, German)
-    const priorityLocales = ["ur-PK", "ur-IN", "en-US", "en-GB", "hi-IN", "ar-SA"];
+    // Prioritize popular languages (English US/GB first, then Urdu, Hindi, Arabic, etc.)
+    const priorityLocales = ["en-US", "en-GB", "en-CA", "en-AU", "ur-PK", "ur-IN", "hi-IN", "ar-SA"];
     voices.sort((a, b) => {
       const aIndex = priorityLocales.indexOf(a.locale);
       const bIndex = priorityLocales.indexOf(b.locale);

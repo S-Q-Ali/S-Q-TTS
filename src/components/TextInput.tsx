@@ -32,7 +32,7 @@ export function TextInput({
         <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
           <span>Enter Text</span>
           <span className="text-xs font-normal text-slate-400">
-            (Supports Urdu, English, Arabic, Hindi, etc.)
+            (Supports English, Urdu, Arabic, Hindi, Spanish, and 70+ languages)
           </span>
         </label>
         <div className="flex items-center gap-3 text-xs">
@@ -63,7 +63,7 @@ export function TextInput({
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           dir={isRTL ? "rtl" : "ltr"}
-          placeholder="Yahan apna text likhein ya paste karein... (e.g. خوش آمدید، یا Write any English text here)"
+          placeholder="Type or paste your text here to convert into natural speech..."
           rows={6}
           className={`w-full bg-transparent px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none resize-none font-normal leading-relaxed ${
             isRTL ? "text-right font-serif text-lg" : "text-left text-sm"

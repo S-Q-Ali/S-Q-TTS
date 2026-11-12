@@ -8,6 +8,34 @@ export interface Preset {
 
 export const SAMPLE_PRESETS: Preset[] = [
   {
+    id: "en-us-1",
+    label: "English Narrative (US)",
+    language: "English",
+    voice: "en-US-JennyNeural",
+    text: "Welcome to S-Q TTS Studio. Convert your written thoughts into crystal-clear, natural human speech.",
+  },
+  {
+    id: "en-us-2",
+    label: "English Conversational (US)",
+    language: "English",
+    voice: "en-US-GuyNeural",
+    text: "Hey there! With this studio, you can effortlessly create voiceovers, audiobooks, and video narrations completely free.",
+  },
+  {
+    id: "en-gb-1",
+    label: "English British (UK)",
+    language: "English",
+    voice: "en-GB-SoniaNeural",
+    text: "Good day. Discover the remarkable depth and authenticity of advanced neural speech synthesis.",
+  },
+  {
+    id: "en-au-1",
+    label: "English Australian (AU)",
+    language: "English",
+    voice: "en-AU-NatashaNeural",
+    text: "G'day! Experience top-tier audio quality with fluid pronunciation and natural rhythm.",
+  },
+  {
     id: "urdu-1",
     label: "اردو خوش آمدید (Urdu Welcome)",
     language: "Urdu",
@@ -22,27 +50,6 @@ export const SAMPLE_PRESETS: Preset[] = [
     text: "آج کے اہم ترین واقعات اور معلوماتی خبروں کے ساتھ ہم آپ کی خدمت میں حاضر ہیں۔",
   },
   {
-    id: "en-us-1",
-    label: "English Narrative (US)",
-    language: "English",
-    voice: "en-US-JennyNeural",
-    text: "Welcome to S-Q TTS. Transforming written thoughts into crystal clear, natural human speech.",
-  },
-  {
-    id: "en-us-2",
-    label: "English Conversational (US)",
-    language: "English",
-    voice: "en-US-GuyNeural",
-    text: "Hey there! With this tool, you can create voiceovers, audiobooks, and tutorials completely free.",
-  },
-  {
-    id: "en-gb-1",
-    label: "English British (UK)",
-    language: "English",
-    voice: "en-GB-SoniaNeural",
-    text: "Good day. Discover the remarkable clarity of advanced neural speech synthesis.",
-  },
-  {
     id: "ar-sa-1",
     label: "عربي فصيح (Arabic)",
     language: "Arabic",
@@ -54,6 +61,6 @@ export const SAMPLE_PRESETS: Preset[] = [
     label: "हिन्दी समाचार (Hindi)",
     language: "Hindi",
     voice: "hi-IN-SwaraNeural",
-    text: "नमस्ते! इस आधुनिक टेक्स्ट-टू-स्पीच ऐप में आपका स्वागत है।",
+    text: "नमस्ते! इस आधुनिक टेक्स्ट-टू-स्पीچ ऐप में आपका स्वागत है।",
   },
 ];

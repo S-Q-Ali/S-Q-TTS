@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const selectedVoice = voice || "ur-PK-UzmaNeural";
+    const selectedVoice = voice || "en-US-JennyNeural";
     const tts = new MsEdgeTTS({
       connectionTimeoutMs: 15000,
       synthesisTimeoutMs: 60000,

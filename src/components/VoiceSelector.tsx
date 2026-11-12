@@ -74,8 +74,8 @@ export function VoiceSelector({
       <div className="flex flex-wrap gap-1.5 text-xs">
         {[
           { id: "ALL", label: "All Languages" },
+          { id: "ENGLISH", label: "🇺🇸/🇬🇧 English" },
           { id: "URDU", label: "🇵🇰 Urdu (اردو)" },
-          { id: "ENGLISH", label: "🇬🇧/🇺🇸 English" },
           { id: "ARABIC", label: "🇸🇦 Arabic (عربي)" },
           { id: "HINDI", label: "🇮🇳 Hindi (हिन्दी)" },
         ].map((tab) => (
@@ -130,6 +130,7 @@ export function VoiceSelector({
         ) : (
           filteredVoices.map((v) => {
             const isSelected = v.shortName === selectedVoice;
+            const isEnglish = v.locale.toLowerCase().startsWith("en");
             const isUrdu = v.locale.toLowerCase().startsWith("ur");
 
             return (
@@ -147,6 +148,8 @@ export function VoiceSelector({
                     className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-semibold ${
                       isSelected
                         ? "bg-brand-600 text-white"
+                        : isEnglish
+                        ? "bg-blue-600/30 text-blue-400 border border-blue-500/30"
                         : isUrdu
                         ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/30"
                         : "bg-slate-800 text-slate-400"
@@ -157,6 +160,11 @@ export function VoiceSelector({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold">{v.shortName}</span>
+                      {isEnglish && (
+                        <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-medium">
+                          English
+                        </span>
+                      )}
                       {isUrdu && (
                         <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-medium">
                           Urdu

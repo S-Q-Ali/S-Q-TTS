@@ -29,9 +29,16 @@ export async function GET() {
       status: v.Status,
     }));
 
-    // Prioritize popular languages (English US/GB first, then Urdu, Hindi, Arabic, etc.)
+    // Prioritize popular languages & featured voices (Brian, Jenny, Guy, Uzma, Asad)
+    const priorityVoices = ["en-US-BrianNeural", "en-US-BrianMultilingualNeural", "en-US-JennyNeural", "en-US-GuyNeural"];
     const priorityLocales = ["en-US", "en-GB", "en-CA", "en-AU", "ur-PK", "ur-IN", "hi-IN", "ar-SA"];
     voices.sort((a, b) => {
+      const aVoiceIdx = priorityVoices.indexOf(a.shortName);
+      const bVoiceIdx = priorityVoices.indexOf(b.shortName);
+      if (aVoiceIdx !== -1 && bVoiceIdx !== -1) return aVoiceIdx - bVoiceIdx;
+      if (aVoiceIdx !== -1) return -1;
+      if (bVoiceIdx !== -1) return 1;
+
       const aIndex = priorityLocales.indexOf(a.locale);
       const bIndex = priorityLocales.indexOf(b.locale);
       if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;

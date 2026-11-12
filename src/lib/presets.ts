@@ -4,12 +4,23 @@ export interface Preset {
   language: string;
   voice: string;
   text: string;
+  rate?: number;
+  pitch?: number;
 }
 
 export const SAMPLE_PRESETS: Preset[] = [
   {
+    id: "brian-motivational",
+    label: "🔥 Deep Motivational (Brian)",
+    language: "English",
+    voice: "en-US-BrianNeural",
+    rate: -8,
+    pitch: -3,
+    text: "Your life isn't yours if you always care about what others think about you. Don't lose your mind over people who wouldn't think twice about losing you. You only have one life to live. So make sure it's yours.",
+  },
+  {
     id: "en-us-1",
-    label: "English Narrative (US)",
+    label: "English Narrative (Jenny)",
     language: "English",
     voice: "en-US-JennyNeural",
     text: "Welcome to S-Q TTS Studio. Convert your written thoughts into crystal-clear, natural human speech.",

@@ -54,6 +54,10 @@ export default function Home() {
   const handleSelectPreset = (preset: Preset) => {
     setText(preset.text);
     setSelectedVoice(preset.voice);
+    if (preset.rate !== undefined) setRate(preset.rate);
+    else setRate(0);
+    if (preset.pitch !== undefined) setPitch(preset.pitch);
+    else setPitch(0);
     setError(null);
   };
 

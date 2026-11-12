@@ -130,6 +130,7 @@ export function VoiceSelector({
         ) : (
           filteredVoices.map((v) => {
             const isSelected = v.shortName === selectedVoice;
+            const isBrian = v.shortName.includes("Brian");
             const isEnglish = v.locale.toLowerCase().startsWith("en");
             const isUrdu = v.locale.toLowerCase().startsWith("ur");
 
@@ -148,6 +149,8 @@ export function VoiceSelector({
                     className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-semibold ${
                       isSelected
                         ? "bg-brand-600 text-white"
+                        : isBrian
+                        ? "bg-amber-600/30 text-amber-300 border border-amber-500/40"
                         : isEnglish
                         ? "bg-blue-600/30 text-blue-400 border border-blue-500/30"
                         : isUrdu
@@ -160,7 +163,12 @@ export function VoiceSelector({
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold">{v.shortName}</span>
-                      {isEnglish && (
+                      {isBrian && (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-medium">
+                          🔥 Viral Motivational
+                        </span>
+                      )}
+                      {!isBrian && isEnglish && (
                         <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.2 rounded font-medium">
                           English
                         </span>

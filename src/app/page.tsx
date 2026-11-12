@@ -7,7 +7,9 @@ import { VoiceSelector } from "@/components/VoiceSelector";
 import { VoiceControls } from "@/components/VoiceControls";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { HistoryList } from "@/components/HistoryList";
+import { VoicePresetBar } from "@/components/VoicePresetBar";
 import { VoiceMetadata, HistoryItem } from "@/lib/types";
+import { VoicePreset } from "@/lib/voice-presets";
 import { Preset } from "@/lib/presets";
 import { Sparkles, Loader2, AlertCircle, Volume2, Shield } from "lucide-react";
 
@@ -50,14 +52,19 @@ export default function Home() {
     fetchVoices();
   }, []);
 
-  // Handle preset selection
+  // Apply a Voice Preset (Acoustic sound profile: Voice + Rate + Pitch + Volume)
+  // Leaves the user's text untouched!
+  const handleApplyVoicePreset = (preset: VoicePreset) => {
+    setSelectedVoice(preset.voice);
+    setRate(preset.rate);
+    setPitch(preset.pitch);
+    setVolume(preset.volume);
+    setError(null);
+  };
+
+  // Handle sample script idea selection (Only fills in text)
   const handleSelectPreset = (preset: Preset) => {
     setText(preset.text);
-    setSelectedVoice(preset.voice);
-    if (preset.rate !== undefined) setRate(preset.rate);
-    else setRate(0);
-    if (preset.pitch !== undefined) setPitch(preset.pitch);
-    else setPitch(0);
     setError(null);
   };
 
@@ -167,6 +174,16 @@ export default function Home() {
           audioUrl={currentAudioUrl}
           textSnippet={currentTextSnippet}
           voiceLabel={currentVoiceLabel}
+        />
+
+        {/* Dedicated Voice Preset & Acoustic Profile Bar */}
+        <VoicePresetBar
+          currentVoice={selectedVoice}
+          currentRate={rate}
+          currentPitch={pitch}
+          currentVolume={volume}
+          onApplyPreset={handleApplyVoicePreset}
+          disabled={isGenerating}
         />
 
         {/* Main studio layout */}

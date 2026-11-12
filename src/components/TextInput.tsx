@@ -87,11 +87,11 @@ export function TextInput({
         </div>
       </div>
 
-      {/* Preset sample pills */}
+      {/* Script Ideas pills */}
       <div className="space-y-1.5">
         <div className="text-xs text-slate-400 flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-brand-400" />
-          <span>Quick Sample Presets:</span>
+          <span>💡 Sample Script Ideas (Click to load text):</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_PRESETS.map((preset) => (

@@ -64,3 +64,20 @@
 - [x] Git commit and status verified.
 **Dependencies:** Task 4
 **Estimated Scope:** S (README update, build test, git commit)
+
+---
+
+## Task 6: Professional Voice Preset System
+**Description:** Build a dedicated Voice Preset management architecture separating vocal acoustics/tuning from text input, featuring built-in templates (Stoic Reel, Audiobook, YouTube Explainer, Urdu Dastan), custom preset creation, localStorage persistence, and JSON export/import.
+**Acceptance Criteria:**
+- [x] `VoicePreset` schema created with curated built-in sound profiles.
+- [x] `VoicePresetBar` component built with 1-click apply that tunes Voice, Speed, Pitch, Volume without overriding text.
+- [x] User can save custom presets with custom names, stored in localStorage.
+- [x] User can delete custom presets and export/import presets as JSON.
+- [x] Separated text ideas from vocal acoustic profiles.
+**Verification:**
+- [x] Apply preset and verify Voice, Speed, Pitch update while text remains untouched.
+- [x] Save custom preset, refresh page, verify persistence.
+- [x] `npm run build` succeeds with 0 errors.
+**Dependencies:** Task 5
+**Estimated Scope:** M (1 new lib module + 1 UI component + page integration)

@@ -11,6 +11,7 @@ export interface VoicePreset {
   id: string;
   name: string;
   category: PresetCategory;
+  gender: "Female" | "Male";
   icon: string;
   voice: string;
   rate: number; // percentage (-50 to +100)
@@ -22,22 +23,92 @@ export interface VoicePreset {
 }
 
 export const BUILT_IN_VOICE_PRESETS: VoicePreset[] = [
+  // --- FEMALE PRESETS ---
+  {
+    id: "preset_emma_poetic",
+    name: "Gentle & Reflective (Emma)",
+    category: "Storytelling",
+    gender: "Female",
+    icon: "🌸",
+    voice: "en-US-EmmaMultilingualNeural",
+    rate: -8,
+    pitch: -2,
+    volume: 0,
+    description: "Heartfelt, soft, and deeply emotional tone. The female counterpart for midnight thoughts, sad poetry, and heartfelt reflections.",
+    isBuiltIn: true,
+  },
+  {
+    id: "preset_ava_reel",
+    name: "Viral Shorts / TikTok (Ava)",
+    category: "Content Creation",
+    gender: "Female",
+    icon: "✨",
+    voice: "en-US-AvaNeural",
+    rate: 0,
+    pitch: 0,
+    volume: 0,
+    description: "Modern, dynamic, vibrant voice widely popular across social media reels, lifestyle vlogs, and podcasts.",
+    isBuiltIn: true,
+  },
+  {
+    id: "preset_sonia_calm",
+    name: "British Mindfulness (Sonia)",
+    category: "Meditation",
+    gender: "Female",
+    icon: "🧘‍♀️",
+    voice: "en-GB-SoniaNeural",
+    rate: -15,
+    pitch: -2,
+    volume: -5,
+    description: "Soothing British RP accent with calm, tranquil pacing for bedtime stories, meditation, and guided relaxation.",
+    isBuiltIn: true,
+  },
+  {
+    id: "preset_urdu_host_female",
+    name: "شائستہ اردو میزبان (Uzma)",
+    category: "Literature & Poetry",
+    gender: "Female",
+    icon: "🇵🇰",
+    voice: "ur-PK-UzmaNeural",
+    rate: -5,
+    pitch: 0,
+    volume: 0,
+    description: "شائستہ اور فطری اردو لب و لہجہ، پوڈکاسٹ، معلوماتی ویڈیوز اور جذباتی اشعار کے لیے۔",
+    isBuiltIn: true,
+  },
+  {
+    id: "preset_jenny_news",
+    name: "Professional News Anchor (Jenny)",
+    category: "Broadcast & News",
+    gender: "Female",
+    icon: "📰",
+    voice: "en-US-JennyNeural",
+    rate: 8,
+    pitch: 1,
+    volume: 0,
+    description: "Crisp, authoritative, articulate broadcast cadence for journalism, corporate explainers, and announcements.",
+    isBuiltIn: true,
+  },
+
+  // --- MALE PRESETS ---
   {
     id: "preset_stoic_reel",
-    name: "Stoic Viral Reel",
+    name: "Stoic Viral Reel (Brian)",
     category: "Motivational",
+    gender: "Male",
     icon: "🔥",
     voice: "en-US-BrianNeural",
     rate: -10,
     pitch: -4,
     volume: 0,
-    description: "Deep, chest-resonant baritone with deliberate pauses. The gold standard for motivational quotes.",
+    description: "Deep, chest-resonant baritone with deliberate pauses. The viral gold standard for motivational quotes.",
     isBuiltIn: true,
   },
   {
     id: "preset_epic_cinema",
-    name: "Epic Movie Trailer",
+    name: "Epic Movie Trailer (Christopher)",
     category: "Storytelling",
+    gender: "Male",
     icon: "🎬",
     voice: "en-US-ChristopherNeural",
     rate: -15,
@@ -48,8 +119,9 @@ export const BUILT_IN_VOICE_PRESETS: VoicePreset[] = [
   },
   {
     id: "preset_audiobook",
-    name: "Audiobook Narrator",
+    name: "Audiobook Narrator (Ryan)",
     category: "Storytelling",
+    gender: "Male",
     icon: "📖",
     voice: "en-GB-RyanNeural",
     rate: -5,
@@ -60,8 +132,9 @@ export const BUILT_IN_VOICE_PRESETS: VoicePreset[] = [
   },
   {
     id: "preset_youtube_explainer",
-    name: "YouTube Tech Explainer",
+    name: "YouTube Tech Explainer (Guy)",
     category: "Content Creation",
+    gender: "Male",
     icon: "⚡",
     voice: "en-US-GuyNeural",
     rate: 5,
@@ -71,51 +144,16 @@ export const BUILT_IN_VOICE_PRESETS: VoicePreset[] = [
     isBuiltIn: true,
   },
   {
-    id: "preset_news_broadcast",
-    name: "Professional News Anchor",
-    category: "Broadcast & News",
-    icon: "📰",
-    voice: "en-US-JennyNeural",
-    rate: 8,
-    pitch: 1,
-    volume: 0,
-    description: "Crisp, authoritative, articulate broadcast cadence for journalism and announcements.",
-    isBuiltIn: true,
-  },
-  {
     id: "preset_urdu_dastan",
-    name: "اردو داستان گوئی (Urdu Dastan)",
+    name: "اردو داستان گوئی (Asad)",
     category: "Literature & Poetry",
+    gender: "Male",
     icon: "📜",
     voice: "ur-PK-AsadNeural",
     rate: -8,
     pitch: -3,
     volume: 0,
     description: "گہرا اور پروقار لحن، اردو ادب، تاریخ اور شاعری کے لیے موزوں۔",
-    isBuiltIn: true,
-  },
-  {
-    id: "preset_urdu_podcast",
-    name: "اردو گفتگو و پوڈکاسٹ (Urdu Host)",
-    category: "Content Creation",
-    icon: "🎙️",
-    voice: "ur-PK-UzmaNeural",
-    rate: 0,
-    pitch: 0,
-    volume: 0,
-    description: "شائستہ، فطری اور دلکش انداز، پوڈکاسٹ اور معلوماتی ویڈیوز کے لیے۔",
-    isBuiltIn: true,
-  },
-  {
-    id: "preset_calm_meditation",
-    name: "Mindfulness & Sleep",
-    category: "Meditation",
-    icon: "🌙",
-    voice: "en-GB-SoniaNeural",
-    rate: -18,
-    pitch: -2,
-    volume: -5,
-    description: "Gentle, whisper-like, ultra-slow tempo for guided meditations and bedtime stories.",
     isBuiltIn: true,
   },
 ];
@@ -184,7 +222,6 @@ export function importPresetsFromJSON(jsonString: string): VoicePreset[] {
   );
 
   const existing = getStoredCustomPresets();
-  // Merge unique by name
   const existingNames = new Set(existing.map((e) => e.name));
   const newItems = validPresets.filter((p) => !existingNames.has(p.name));
   const combined = [...newItems, ...existing];

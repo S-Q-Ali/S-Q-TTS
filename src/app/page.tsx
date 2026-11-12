@@ -21,6 +21,7 @@ export default function Home() {
   const [rate, setRate] = useState<number>(0);
   const [pitch, setPitch] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0);
+  const [autoCleanTags, setAutoCleanTags] = useState<boolean>(true);
 
   const [voices, setVoices] = useState<VoiceMetadata[]>([]);
   const [loadingVoices, setLoadingVoices] = useState<boolean>(true);
@@ -100,6 +101,7 @@ export default function Home() {
           rate: rateStr,
           pitch: pitchStr,
           volume: volumeStr,
+          autoClean: autoCleanTags,
         }),
       });
 
@@ -195,6 +197,8 @@ export default function Home() {
                 text={text}
                 onChange={setText}
                 onSelectPreset={handleSelectPreset}
+                autoCleanTags={autoCleanTags}
+                onToggleAutoClean={setAutoCleanTags}
                 disabled={isGenerating}
               />
 

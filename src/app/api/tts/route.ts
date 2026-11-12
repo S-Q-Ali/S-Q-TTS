@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+import { parseScriptTags } from "@/lib/script-parser";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { text, voice, rate, pitch, volume } = body;
+    const { text, voice, rate, pitch, volume, autoClean = true } = body;
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return NextResponse.json({ error: "Text is required" }, { status: 400 });
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Process stage directions and bracketed pauses if autoClean is enabled
+    const processedText = autoClean ? parseScriptTags(text.trim()).cleanedText : text.trim();
 
     const selectedVoice = voice || "en-US-JennyNeural";
     const tts = new MsEdgeTTS({
@@ -36,7 +40,7 @@ export async function POST(req: NextRequest) {
     if (pitch && pitch !== "+0Hz" && pitch !== "0Hz") prosodyOptions.pitch = pitch;
     if (volume && volume !== "+0%" && volume !== "0%") prosodyOptions.volume = volume;
 
-    const { audioStream } = tts.toStream(text.trim(), prosodyOptions);
+    const { audioStream } = tts.toStream(processedText, prosodyOptions);
 
     const chunks: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {

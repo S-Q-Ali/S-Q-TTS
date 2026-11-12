@@ -42,10 +42,12 @@ export function VoicePresetBar({
   disabled = false,
 }: VoicePresetBarProps) {
   const [customPresets, setCustomPresets] = useState<VoicePreset[]>([]);
+  const [selectedGender, setSelectedGender] = useState<string>("ALL");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetCategory, setPresetCategory] = useState<PresetCategory>("Custom");
+  const [presetGender, setPresetGender] = useState<"Female" | "Male">("Female");
   const [presetDescription, setPresetDescription] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -62,10 +64,10 @@ export function VoicePresetBar({
 
   const categories = useMemo(() => {
     return [
-      { id: "ALL", label: "All Presets" },
+      { id: "ALL", label: "All Categories" },
       { id: "Motivational", label: "🔥 Motivational" },
-      { id: "Storytelling", label: "🎬 Story & Narration" },
-      { id: "Content Creation", label: "⚡ Video & Podcast" },
+      { id: "Storytelling", label: "🎬 Story & Poetry" },
+      { id: "Content Creation", label: "⚡ Video & Reel" },
       { id: "Broadcast & News", label: "📰 News & Media" },
       { id: "Literature & Poetry", label: "📜 Urdu Literature" },
       { id: "Meditation", label: "🌙 Meditation" },
@@ -74,10 +76,17 @@ export function VoicePresetBar({
   }, [customPresets.length]);
 
   const filteredPresets = useMemo(() => {
-    if (selectedCategory === "ALL") return allPresets;
-    if (selectedCategory === "Custom") return customPresets;
-    return allPresets.filter((p) => p.category === selectedCategory);
-  }, [allPresets, customPresets, selectedCategory]);
+    return allPresets.filter((p) => {
+      const matchesCategory =
+        selectedCategory === "ALL" ||
+        (selectedCategory === "Custom" ? !p.isBuiltIn : p.category === selectedCategory);
+
+      const matchesGender =
+        selectedGender === "ALL" || p.gender === selectedGender;
+
+      return matchesCategory && matchesGender;
+    });
+  }, [allPresets, selectedCategory, selectedGender]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -96,6 +105,7 @@ export function VoicePresetBar({
     const saved = saveCustomPresetToStorage({
       name: presetName.trim(),
       category: presetCategory,
+      gender: presetGender,
       icon: "⭐",
       voice: currentVoice,
       rate: currentRate,
@@ -210,21 +220,45 @@ export function VoicePresetBar({
         </div>
       )}
 
-      {/* Category Filter Pills */}
-      <div className="flex flex-wrap gap-1.5 text-xs">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setSelectedCategory(cat.id)}
-            className={`px-2.5 py-1 rounded-lg border transition-all ${
-              selectedCategory === cat.id
-                ? "bg-brand-600 text-white border-brand-500 font-medium shadow-sm"
-                : "bg-slate-950/40 text-slate-400 border-white/5 hover:bg-slate-800 hover:text-slate-200"
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
+      {/* Gender & Category Filter Row */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        {/* Gender Toggle */}
+        <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-white/5 text-xs">
+          {[
+            { id: "ALL", label: "All Genders" },
+            { id: "Female", label: "♀ Female (5)" },
+            { id: "Male", label: "♂ Male (5)" },
+          ].map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setSelectedGender(g.id)}
+              className={`px-2.5 py-1 rounded-lg transition-all ${
+                selectedGender === g.id
+                  ? "bg-brand-600 text-white font-medium shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Category Filter Pills */}
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-2.5 py-1 rounded-lg border transition-all ${
+                selectedCategory === cat.id
+                  ? "bg-brand-600/30 text-brand-300 border-brand-500/50 font-medium shadow-sm"
+                  : "bg-slate-950/40 text-slate-400 border-white/5 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Presets Grid */}

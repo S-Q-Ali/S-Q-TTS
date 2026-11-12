@@ -81,3 +81,19 @@
 - [x] `npm run build` succeeds with 0 errors.
 **Dependencies:** Task 5
 **Estimated Scope:** M (1 new lib module + 1 UI component + page integration)
+
+---
+
+## Task 7: Smart Script Tag Manager (Beta) & Female Voice Presets
+**Description:** Implement 3-tier dynamic NLP stage-direction & pause parser (`[Soft and reflective]`, `[Short pause]`, etc.) to auto-manage bracketed script cues into natural audio pauses, and expand Voice Presets to include top-tier Female voices (Emma, Ava, Sonia, Uzma, Jenny) with gender filtering.
+**Acceptance Criteria:**
+- [x] `src/lib/script-parser.ts` handles pause detection, emotion muting, and general bracket fallback dynamically.
+- [x] `TextInput.tsx` displays Beta Smart Script Tag Manager banner with detected tag badges and preview clean text toggle.
+- [x] Added 5 curated female presets with gender toggle filter in `VoicePresetBar.tsx`.
+- [x] Server endpoint `/api/tts` processes stage directions automatically.
+**Verification:**
+- [x] Parse user's script with 9 stage directions and verify no bracket words are spoken.
+- [x] Test Female voices (`Emma`, `Ava`, `Sonia`, `Uzma`) synthesis.
+- [x] `npm run build` succeeds with 0 errors.
+**Dependencies:** Task 6
+**Estimated Scope:** M (script parser + female presets + UI integration)

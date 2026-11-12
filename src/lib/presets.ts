@@ -10,8 +10,38 @@ export interface Preset {
 
 export const SAMPLE_PRESETS: Preset[] = [
   {
+    id: "poetic-reflection-script",
+    label: "🌙 Poetic Script (Stage Directions Demo)",
+    language: "English",
+    voice: "en-US-EmmaMultilingualNeural",
+    text: `[Soft and reflective] Sometimes, you are not sleepy.
+
+[Short pause]
+
+You are just carrying things you never found the words to say.
+
+[Brief pause]
+
+[Gentle sadness] You go to bed hoping to wake up lighter,
+only to realize that sleep only rests the body.
+
+[Short pause]
+
+It cannot rest a mind that has been strong for too long.
+
+[Long pause]
+
+[Thoughtful] Maybe you don't need another eight hours of sleep.
+
+[Softly] Maybe you just need an empty room, a quiet rain...
+
+[Brief pause]
+
+[Quiet and heartfelt] and the permission to finally put down what isn't yours to carry.`,
+  },
+  {
     id: "brian-motivational",
-    label: "🔥 Deep Motivational (Brian)",
+    label: "🔥 Stoic Quote (Brian)",
     language: "English",
     voice: "en-US-BrianNeural",
     rate: -8,

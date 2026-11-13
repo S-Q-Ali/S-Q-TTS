@@ -54,7 +54,7 @@ export function VoiceCloneStudio() {
       setCheckingServer(true);
       const res = await fetch("/api/clone", { cache: "no-store" });
       const data = await res.json();
-      if (res.ok && data.online) {
+      if (data.online) {
         setServerOnline(true);
         setDevice(data.device || "cpu");
         setSavedVoices(data.voices || []);

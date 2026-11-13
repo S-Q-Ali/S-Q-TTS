@@ -10,13 +10,15 @@ export async function GET() {
     const healthRes = await fetch(`${PYTHON_SERVER_URL}/health`, {
       method: "GET",
       cache: "no-store",
+      signal: AbortSignal.timeout(3000), // 3s timeout to avoid hanging
     });
 
     if (!healthRes.ok) {
-      return NextResponse.json(
-        { online: false, error: "Voice clone server returned unhealthy status" },
-        { status: 503 }
-      );
+      return NextResponse.json({
+        online: false,
+        status: "unhealthy",
+        message: "Voice clone server is reachable but returned an unhealthy status.",
+      });
     }
 
     const healthData = await healthRes.json();
@@ -26,6 +28,7 @@ export async function GET() {
     try {
       const voicesRes = await fetch(`${PYTHON_SERVER_URL}/voices`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(3000),
       });
       if (voicesRes.ok) {
         const vData = await voicesRes.json();
@@ -37,19 +40,19 @@ export async function GET() {
 
     return NextResponse.json({
       online: true,
+      status: "ready",
       device: healthData.device,
       modelLoaded: healthData.model_loaded,
       voices,
     });
   } catch (err: any) {
-    return NextResponse.json(
-      {
-        online: false,
-        error: "Voice clone server is not running on localhost:8001",
-        details: err?.message,
-      },
-      { status: 503 }
-    );
+    // Return 200 with online: false so frontend health-check does not throw 503 error in console
+    return NextResponse.json({
+      online: false,
+      status: "offline",
+      message: "Voice clone server is currently offline on localhost:8001.",
+      instructions: "Run 'voice-clone-server/start.bat' (or setup.bat if first time) to start the local AI engine.",
+    });
   }
 }
 

@@ -39,6 +39,7 @@ voice-clone-server/venv/
 voice-clone-server/__pycache__/
 voice-clone-server/temp_uploads/
 voice-clone-server/temp_outputs/
+voice-clone-server/models_cache/
 voice-clone-server/saved_voices/*
 !voice-clone-server/saved_voices/.gitkeep
 

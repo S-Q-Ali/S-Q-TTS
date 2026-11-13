@@ -22,6 +22,13 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+# ─── Model Cache Directory (Local Project Folder) ─────────────────
+# Lock model downloads directly inside the project directory: E:\Web App\TTS App\voice-clone-server\models_cache
+MODELS_CACHE_DIR = Path(__file__).parent / "models_cache"
+MODELS_CACHE_DIR.mkdir(exist_ok=True)
+os.environ["HF_HOME"] = str(MODELS_CACHE_DIR.resolve())
+os.environ["TORCH_HOME"] = str(MODELS_CACHE_DIR.resolve())
+
 # ─── Globals ────────────────────────────────────────────────────────
 MODEL = None
 DEVICE = None

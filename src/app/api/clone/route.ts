@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseScriptTags } from "@/lib/script-parser";
+import { Agent, setGlobalDispatcher } from "undici";
 
 export const runtime = "nodejs";
+
+// Configure Undici Agent to allow long-running voice cloning jobs (up to 10 minutes)
+// This specifically prevents UND_ERR_HEADERS_TIMEOUT which defaults to 300,000ms (5 minutes)
+const globalDispatcher = new Agent({
+  headersTimeout: 600_000, // 10 minutes
+  bodyTimeout: 600_000,    // 10 minutes
+  connectTimeout: 30_000,
+});
+setGlobalDispatcher(globalDispatcher);
 
 const PYTHON_SERVER_URL = process.env.VOICE_CLONE_SERVER_URL || "http://127.0.0.1:8001";
 
@@ -101,6 +111,8 @@ export async function POST(req: NextRequest) {
       method: "POST",
       body: pyFormData,
       signal: abortSignal,
+      // @ts-expect-error undici dispatcher option
+      dispatcher: globalDispatcher,
     });
 
     if (!pyRes.ok) {

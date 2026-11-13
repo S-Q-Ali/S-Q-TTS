@@ -58,21 +58,42 @@ async def lifespan(app: FastAPI):
 
     from chatterbox.tts import ChatterboxTTS
 
-    # Try loading on GPU first; if 2GB VRAM throws CUDA OOM, automatically fall back to CPU
+    # Try smart loading:
+    # 1. Full GPU (Fastest)
+    # 2. Pipeline Split: t3 (Text-to-Token LLM) on CPU + s3gen (Diffusion Waveform Vocoder) on GPU
+    # 3. Full CPU + 16GB RAM (Safe Fallback)
     try:
         if DEVICE == "cuda":
-            print("⚡ Attempting GPU loading (CUDA)...")
+            print("⚡ Step 1: Testing Full GPU loading (CUDA)...")
             MODEL = ChatterboxTTS.from_pretrained(device="cuda")
-            print("🚀 Successfully loaded model on GPU!")
+            print("🚀 Success: Model running 100% on GPU!")
         else:
             MODEL = ChatterboxTTS.from_pretrained(device="cpu")
+            print("✅ Success: Model running on CPU mode.")
     except RuntimeError as cuda_err:
         if "out of memory" in str(cuda_err).lower() or "cuda" in str(cuda_err).lower():
-            print("⚠️ CUDA VRAM limit reached (2GB is tight). Automatically falling back to CPU + 16GB RAM mode...")
+            print("⚠️ 2GB VRAM was too tight for full model. Attempting TRUE HYBRID (CPU + GPU Pipeline)...")
             torch.cuda.empty_cache()
-            DEVICE = "cpu"
-            MODEL = ChatterboxTTS.from_pretrained(device="cpu")
-            print("✅ Successfully loaded model on CPU mode!")
+            try:
+                # Load on CPU first
+                MODEL = ChatterboxTTS.from_pretrained(device="cpu")
+                
+                # Split Pipeline: Offload s3gen (vocoder/audio diffusion) to GPU MX250
+                # Keep t3 (heavy LLM text transformer) in 16GB CPU RAM
+                if hasattr(MODEL, "s3gen"):
+                    print("⚡ Moving s3gen (Diffusion Vocoder) to NVIDIA MX250 GPU...")
+                    MODEL.s3gen = MODEL.s3gen.to("cuda")
+                    DEVICE = "cuda+cpu (hybrid)"
+                    print("🚀 TRUE HYBRID ACTIVATED: CPU handles Text Tokens + GPU synthesizes Audio Waveform simultaneously!")
+                else:
+                    DEVICE = "cpu"
+                    print("✅ Running in CPU mode with 16GB RAM.")
+            except Exception as hybrid_err:
+                print(f"⚠️ Hybrid split exception ({hybrid_err}). Reverting safely to pure CPU...")
+                torch.cuda.empty_cache()
+                DEVICE = "cpu"
+                MODEL = ChatterboxTTS.from_pretrained(device="cpu")
+                print("✅ Running stable on CPU mode.")
         else:
             raise cuda_err
 

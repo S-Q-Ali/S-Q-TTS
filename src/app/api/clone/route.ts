@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseScriptTags } from "@/lib/script-parser";
-import { Agent, setGlobalDispatcher } from "undici";
+import { fetch as undiciFetch, Agent } from "undici";
 
 export const runtime = "nodejs";
 
-// Configure Undici Agent to allow long-running voice cloning jobs (up to 10 minutes)
-// This specifically prevents UND_ERR_HEADERS_TIMEOUT which defaults to 300,000ms (5 minutes)
-const globalDispatcher = new Agent({
+// Dedicated Undici agent with 10-minute headersTimeout to allow slow CPU voice cloning
+const cloneAgent = new Agent({
   headersTimeout: 600_000, // 10 minutes
   bodyTimeout: 600_000,    // 10 minutes
   connectTimeout: 30_000,
 });
-setGlobalDispatcher(globalDispatcher);
 
 const PYTHON_SERVER_URL = process.env.VOICE_CLONE_SERVER_URL || "http://127.0.0.1:8001";
 
@@ -107,12 +105,12 @@ export async function POST(req: NextRequest) {
 
     const abortSignal = AbortSignal.timeout(600_000); // 10-minute timeout for long cloning jobs
 
-    const pyRes = await fetch(targetEndpoint, {
+    // Use undiciFetch with the matched cloneAgent to bypass Node's 5-minute limit safely
+    const pyRes = await undiciFetch(targetEndpoint, {
       method: "POST",
-      body: pyFormData,
+      body: pyFormData as any,
       signal: abortSignal,
-      // @ts-expect-error undici dispatcher option
-      dispatcher: globalDispatcher,
+      dispatcher: cloneAgent,
     });
 
     if (!pyRes.ok) {

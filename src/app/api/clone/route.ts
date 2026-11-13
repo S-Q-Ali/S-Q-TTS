@@ -95,7 +95,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const pyRes = await fetch(targetEndpoint, {
+    const abortSignal = AbortSignal.timeout(600_000); // 10‑minute timeout for long cloning jobs
+const pyRes = await fetch(targetEndpoint, {
+  method: "POST",
+  body: pyFormData,
+  signal: abortSignal,
+});
       method: "POST",
       body: pyFormData,
     });

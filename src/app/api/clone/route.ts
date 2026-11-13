@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseScriptTags } from "@/lib/script-parser";
-import { fetch as undiciFetch, Agent } from "undici";
+import { fetch as undiciFetch, Agent, FormData as UndiciFormData } from "undici";
 
 export const runtime = "nodejs";
 
@@ -83,8 +83,8 @@ export async function POST(req: NextRequest) {
     // Process stage directions, emotions, and bracketed pauses
     const processedText = autoClean ? parseScriptTags(text.trim()).cleanedText : text.trim();
 
-    // Forward to Python server
-    const pyFormData = new FormData();
+    // Forward to Python server using Undici's FormData so undiciFetch packages multipart boundaries properly
+    const pyFormData = new UndiciFormData();
     pyFormData.append("text", processedText);
     pyFormData.append("exaggeration", exaggeration);
     pyFormData.append("cfg_weight", cfgWeight);
@@ -92,7 +92,12 @@ export async function POST(req: NextRequest) {
     let targetEndpoint = `${PYTHON_SERVER_URL}/clone-voice`;
 
     if (speakerWav && speakerWav.size > 0) {
-      pyFormData.append("speaker_wav", speakerWav, speakerWav.name);
+      const audioBytes = await speakerWav.arrayBuffer();
+      pyFormData.append(
+        "speaker_wav",
+        new Blob([audioBytes], { type: speakerWav.type || "audio/wav" }),
+        speakerWav.name || "reference.wav"
+      );
     } else if (voiceName) {
       pyFormData.append("voice_name", voiceName);
       targetEndpoint = `${PYTHON_SERVER_URL}/clone-saved`;
@@ -105,7 +110,7 @@ export async function POST(req: NextRequest) {
 
     const abortSignal = AbortSignal.timeout(600_000); // 10-minute timeout for long cloning jobs
 
-    // Use undiciFetch with the matched cloneAgent to bypass Node's 5-minute limit safely
+    // Use undiciFetch with the matched cloneAgent and pyFormData
     const pyRes = await undiciFetch(targetEndpoint, {
       method: "POST",
       body: pyFormData as any,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseScriptTags } from "@/lib/script-parser";
 
 export const runtime = "nodejs";
 
@@ -65,14 +66,18 @@ export async function POST(req: NextRequest) {
     const voiceName = formData.get("voice_name") as string | null;
     const exaggeration = formData.get("exaggeration") as string || "0.5";
     const cfgWeight = formData.get("cfg_weight") as string || "0.5";
+    const autoClean = formData.get("auto_clean") !== "false";
 
     if (!text || !text.trim()) {
       return NextResponse.json({ error: "Text is required" }, { status: 400 });
     }
 
+    // Process stage directions, emotions, and bracketed pauses
+    const processedText = autoClean ? parseScriptTags(text.trim()).cleanedText : text.trim();
+
     // Forward to Python server
     const pyFormData = new FormData();
-    pyFormData.append("text", text);
+    pyFormData.append("text", processedText);
     pyFormData.append("exaggeration", exaggeration);
     pyFormData.append("cfg_weight", cfgWeight);
 

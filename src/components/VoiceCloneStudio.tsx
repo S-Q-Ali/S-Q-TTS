@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { parseScriptTags } from "@/lib/script-parser";
 import {
   Upload,
   Mic,
@@ -17,6 +18,11 @@ import {
   Download,
   Loader2,
   HelpCircle,
+  Wand2,
+  Eye,
+  EyeOff,
+  Clock,
+  VolumeX,
 } from "lucide-react";
 
 export function VoiceCloneStudio() {
@@ -34,6 +40,13 @@ export function VoiceCloneStudio() {
   const [selectedSavedVoice, setSelectedSavedVoice] = useState<string>("");
   const [exaggeration, setExaggeration] = useState<number>(0.5);
   const [cfgWeight, setCfgWeight] = useState<number>(0.5);
+  const [autoCleanTags, setAutoCleanTags] = useState<boolean>(true);
+  const [showPreview, setShowPreview] = useState<boolean>(false);
+
+  // Script tags analysis
+  const scriptAnalysis = useMemo(() => {
+    return parseScriptTags(text);
+  }, [text]);
 
   // Recording State
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -151,6 +164,7 @@ export function VoiceCloneStudio() {
       formData.append("text", text.trim());
       formData.append("exaggeration", exaggeration.toString());
       formData.append("cfg_weight", cfgWeight.toString());
+      formData.append("auto_clean", autoCleanTags ? "true" : "false");
 
       if (audioFile) {
         formData.append("speaker_wav", audioFile);
@@ -377,16 +391,116 @@ export function VoiceCloneStudio() {
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 2. Speech Script
               </label>
-              <span className="text-xs text-zinc-500">{text.length} chars</span>
+              <div className="flex items-center gap-2">
+                {scriptAnalysis.hasTags && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium cursor-pointer"
+                  >
+                    {showPreview ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" />
+                        <span>Show Raw</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Preview Cleaned</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                <span className="text-xs text-zinc-500">{text.length} chars</span>
+              </div>
             </div>
 
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={6}
-              className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y font-sans leading-relaxed"
-              placeholder="What do you want your cloned voice to say? Write your script here..."
-            />
+            {showPreview ? (
+              <div className="w-full bg-zinc-950/90 border border-purple-500/30 rounded-xl p-4 text-sm text-zinc-200 min-h-[148px] space-y-2">
+                <div className="flex items-center justify-between text-xs text-purple-300 border-b border-zinc-800 pb-2">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    Cleaned Voice Output (Tags auto-muted, natural pauses preserved):
+                  </span>
+                  <button
+                    onClick={() => setShowPreview(false)}
+                    className="text-zinc-400 hover:text-zinc-200 text-xs"
+                  >
+                    Back to Raw ✕
+                  </button>
+                </div>
+                <p className="italic text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                  {scriptAnalysis.cleanedText || "(Empty text)"}
+                </p>
+              </div>
+            ) : (
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={6}
+                className="w-full bg-zinc-950/80 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-y font-sans leading-relaxed"
+                placeholder="What do you want your cloned voice to say? Write your script here... Supports [Softly], [Short pause], [Gentle sadness], etc."
+              />
+            )}
+
+            {/* Smart Script Tag Manager (Beta) Banner for Cloning */}
+            {scriptAnalysis.hasTags && (
+              <div className="rounded-xl border border-purple-500/30 bg-purple-950/30 p-3.5 space-y-2.5 text-xs animate-in fade-in">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider border border-purple-500/30">
+                      Beta Engine
+                    </span>
+                    <span className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                      <Wand2 className="w-3.5 h-3.5 text-purple-400" />
+                      Smart Script Tag Manager
+                    </span>
+                  </div>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300 hover:text-white select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoCleanTags}
+                      onChange={(e) => setAutoCleanTags(e.target.checked)}
+                      className="rounded accent-purple-600 cursor-pointer"
+                    />
+                    <span className="text-[11px] font-medium">Auto-Manage Tags (Recommended)</span>
+                  </label>
+                </div>
+
+                <p className="text-[11px] text-zinc-400 leading-normal">
+                  Detected {scriptAnalysis.detectedTags.length} bracket tags in your script.
+                  Stage directions/emotions will be <strong>muted</strong> so your cloned voice won't speak them,
+                  and pause tags are converted to <strong>natural expressive pauses</strong>.
+                </p>
+
+                {/* Detected tags badges */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {scriptAnalysis.detectedTags.map((tag, idx) => (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono border ${
+                        tag.action === "pause"
+                          ? "bg-amber-950/40 text-amber-300 border-amber-800/50"
+                          : "bg-purple-950/50 text-purple-300 border-purple-800/50"
+                      }`}
+                    >
+                      {tag.action === "pause" ? (
+                        <Clock className="w-3 h-3 text-amber-400" />
+                      ) : (
+                        <VolumeX className="w-3 h-3 text-purple-400" />
+                      )}
+                      <span>{tag.raw}</span>
+                      <span className="opacity-75 text-[10px]">
+                        {tag.action === "pause"
+                          ? `(${((tag.pauseDurationMs || 1000) / 1000).toFixed(1)}s pause)`
+                          : "(muted)"}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Error & Success Messages */}
             {error && (

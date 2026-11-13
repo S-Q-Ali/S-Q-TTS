@@ -36,9 +36,15 @@ async def lifespan(app: FastAPI):
     """Load Chatterbox model once at startup."""
     global MODEL, DEVICE
 
-    # Detect device
+    # Enable expandable segments to combat fragmentation on low VRAM GPUs
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+    # Detect device and attempt smart CPU/GPU auto-offload
     if torch.cuda.is_available():
         DEVICE = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_vram = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1)
+        print(f"Detected GPU: {gpu_name} ({gpu_vram} GB VRAM)")
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         DEVICE = "mps"
     else:
@@ -46,12 +52,29 @@ async def lifespan(app: FastAPI):
 
     print(f"╔══════════════════════════════════════════╗")
     print(f"║  S-Q-TTS Voice Clone Server              ║")
-    print(f"║  Device: {DEVICE:<32s}║")
+    print(f"║  Target Device: {DEVICE:<25s}║")
     print(f"╚══════════════════════════════════════════╝")
-    print("Loading Chatterbox TTS model (first run downloads ~2GB)...")
+    print("Loading Chatterbox TTS model...")
 
     from chatterbox.tts import ChatterboxTTS
-    MODEL = ChatterboxTTS.from_pretrained(device=DEVICE)
+
+    # Try loading on GPU first; if 2GB VRAM throws CUDA OOM, automatically fall back to CPU
+    try:
+        if DEVICE == "cuda":
+            print("⚡ Attempting GPU loading (CUDA)...")
+            MODEL = ChatterboxTTS.from_pretrained(device="cuda")
+            print("🚀 Successfully loaded model on GPU!")
+        else:
+            MODEL = ChatterboxTTS.from_pretrained(device="cpu")
+    except RuntimeError as cuda_err:
+        if "out of memory" in str(cuda_err).lower() or "cuda" in str(cuda_err).lower():
+            print("⚠️ CUDA VRAM limit reached (2GB is tight). Automatically falling back to CPU + 16GB RAM mode...")
+            torch.cuda.empty_cache()
+            DEVICE = "cpu"
+            MODEL = ChatterboxTTS.from_pretrained(device="cpu")
+            print("✅ Successfully loaded model on CPU mode!")
+        else:
+            raise cuda_err
 
     print("✅ Model loaded successfully!")
 

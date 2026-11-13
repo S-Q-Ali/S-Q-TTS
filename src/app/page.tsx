@@ -8,10 +8,11 @@ import { VoiceControls } from "@/components/VoiceControls";
 import { AudioPlayer } from "@/components/AudioPlayer";
 import { HistoryList } from "@/components/HistoryList";
 import { VoicePresetBar } from "@/components/VoicePresetBar";
+import { VoiceCloneStudio } from "@/components/VoiceCloneStudio";
 import { VoiceMetadata, HistoryItem } from "@/lib/types";
 import { VoicePreset } from "@/lib/voice-presets";
 import { Preset } from "@/lib/presets";
-import { Sparkles, Loader2, AlertCircle, Volume2, Shield } from "lucide-react";
+import { Sparkles, Loader2, AlertCircle, Volume2, Shield, Dna, Radio } from "lucide-react";
 
 export default function Home() {
   const [text, setText] = useState<string>(
@@ -22,6 +23,7 @@ export default function Home() {
   const [pitch, setPitch] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0);
   const [autoCleanTags, setAutoCleanTags] = useState<boolean>(true);
+  const [activeTab, setActiveTab] = useState<"tts" | "clone">("tts");
 
   const [voices, setVoices] = useState<VoiceMetadata[]>([]);
   const [loadingVoices, setLoadingVoices] = useState<boolean>(true);
@@ -155,119 +157,158 @@ export default function Home() {
       <Header />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Error notification banner */}
-        {error && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
-              <span>{error}</span>
-            </div>
+        {/* Navigation Mode Switcher: Neural TTS vs Voice Cloning */}
+        <div className="flex items-center justify-center">
+          <div className="bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 flex items-center gap-1.5 shadow-xl">
             <button
-              onClick={() => setError(null)}
-              className="text-slate-400 hover:text-white"
+              onClick={() => setActiveTab("tts")}
+              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "tts"
+                  ? "bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-lg shadow-brand-600/30"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+              }`}
             >
-              ✕
+              <Radio className="w-4 h-4" />
+              <span>Microsoft Neural TTS (322 Voices)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("clone")}
+              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === "clone"
+                  ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
+              }`}
+            >
+              <Dna className="w-4 h-4 text-purple-400" />
+              <span>Voice Clone Studio</span>
+              <span className="px-1.5 py-0.5 text-[10px] uppercase font-bold tracking-wider bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
+                New
+              </span>
             </button>
           </div>
-        )}
-
-        {/* Audio Player if generated */}
-        <AudioPlayer
-          audioUrl={currentAudioUrl}
-          textSnippet={currentTextSnippet}
-          voiceLabel={currentVoiceLabel}
-        />
-
-        {/* Dedicated Voice Preset & Acoustic Profile Bar */}
-        <VoicePresetBar
-          currentVoice={selectedVoice}
-          currentRate={rate}
-          currentPitch={pitch}
-          currentVolume={volume}
-          onApplyPreset={handleApplyVoicePreset}
-          disabled={isGenerating}
-        />
-
-        {/* Main studio layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Text Input & Prosody Controls */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="glass-panel p-5 sm:p-6 rounded-3xl shadow-xl space-y-6">
-              <TextInput
-                text={text}
-                onChange={setText}
-                onSelectPreset={handleSelectPreset}
-                autoCleanTags={autoCleanTags}
-                onToggleAutoClean={setAutoCleanTags}
-                disabled={isGenerating}
-              />
-
-              <VoiceControls
-                rate={rate}
-                pitch={pitch}
-                volume={volume}
-                onRateChange={setRate}
-                onPitchChange={setPitch}
-                onVolumeChange={setVolume}
-                onReset={handleResetControls}
-                disabled={isGenerating}
-              />
-
-              {/* Generate Action Button */}
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !text.trim()}
-                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-600 bg-[length:200%_auto] hover:bg-right text-white font-semibold text-sm shadow-xl shadow-brand-600/30 hover:shadow-brand-600/50 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Synthesizing Voice... (Please wait)</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5" />
-                    <span>Generate Speech (Convert to Audio)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* History List */}
-            <HistoryList
-              history={history}
-              onPlayItem={handlePlayHistoryItem}
-              onDeleteItem={handleDeleteHistoryItem}
-              onClearAll={handleClearHistory}
-            />
-          </div>
-
-          {/* Right Column: Voice Selection and Info */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="glass-panel p-5 sm:p-6 rounded-3xl shadow-xl">
-              <VoiceSelector
-                voices={voices}
-                selectedVoice={selectedVoice}
-                onSelectVoice={setSelectedVoice}
-                loading={loadingVoices}
-              />
-            </div>
-
-            {/* Info Card */}
-            <div className="rounded-2xl border border-white/5 bg-slate-900/40 p-4 space-y-2 text-xs text-slate-400">
-              <div className="flex items-center gap-1.5 text-slate-200 font-medium">
-                <Shield className="h-4 w-4 text-emerald-400" />
-                <span>Feature Highlights</span>
-              </div>
-              <ul className="space-y-1 list-disc list-inside text-slate-400 leading-relaxed">
-                <li>300+ Microsoft Edge Neural Voices across 70+ languages.</li>
-                <li>Native English voices (<code className="text-blue-400">en-US-Jenny</code>, <code className="text-blue-400">en-US-Guy</code>, <code className="text-blue-400">en-GB-Sonia</code>) and Urdu (<code className="text-emerald-400">ur-PK-Uzma</code>, <code className="text-emerald-400">ur-PK-Asad</code>).</li>
-                <li>Direct high-bitrate MP3 download capability.</li>
-                <li>Zero subscriptions, 100% free forever.</li>
-              </ul>
-            </div>
-          </div>
         </div>
+
+        {/* Voice Cloning Studio Section */}
+        {activeTab === "clone" ? (
+          <VoiceCloneStudio />
+        ) : (
+          <>
+            {/* Error notification banner */}
+            {error && (
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Audio Player if generated */}
+            <AudioPlayer
+              audioUrl={currentAudioUrl}
+              textSnippet={currentTextSnippet}
+              voiceLabel={currentVoiceLabel}
+            />
+
+            {/* Dedicated Voice Preset & Acoustic Profile Bar */}
+            <VoicePresetBar
+              currentVoice={selectedVoice}
+              currentRate={rate}
+              currentPitch={pitch}
+              currentVolume={volume}
+              onApplyPreset={handleApplyVoicePreset}
+              disabled={isGenerating}
+            />
+
+            {/* Main studio layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Text Input & Prosody Controls */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="glass-panel p-5 sm:p-6 rounded-3xl shadow-xl space-y-6">
+                  <TextInput
+                    text={text}
+                    onChange={setText}
+                    onSelectPreset={handleSelectPreset}
+                    autoCleanTags={autoCleanTags}
+                    onToggleAutoClean={setAutoCleanTags}
+                    disabled={isGenerating}
+                  />
+
+                  <VoiceControls
+                    rate={rate}
+                    pitch={pitch}
+                    volume={volume}
+                    onRateChange={setRate}
+                    onPitchChange={setPitch}
+                    onVolumeChange={setVolume}
+                    onReset={handleResetControls}
+                    disabled={isGenerating}
+                  />
+
+                  {/* Generate Action Button */}
+                  <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !text.trim()}
+                    className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-brand-600 via-indigo-600 to-brand-600 bg-[length:200%_auto] hover:bg-right text-white font-semibold text-sm shadow-xl shadow-brand-600/30 hover:shadow-brand-600/50 transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Synthesizing Voice... (Please wait)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-5 w-5" />
+                        <span>Generate Speech (Convert to Audio)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* History List */}
+                <HistoryList
+                  history={history}
+                  onPlayItem={handlePlayHistoryItem}
+                  onDeleteItem={handleDeleteHistoryItem}
+                  onClearAll={handleClearHistory}
+                />
+              </div>
+
+              {/* Right Column: Voice Selection and Info */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="glass-panel p-5 sm:p-6 rounded-3xl shadow-xl">
+                  <VoiceSelector
+                    voices={voices}
+                    selectedVoice={selectedVoice}
+                    onSelectVoice={setSelectedVoice}
+                    loading={loadingVoices}
+                  />
+                </div>
+
+                {/* Info Card */}
+                <div className="rounded-2xl border border-white/5 bg-slate-900/40 p-4 space-y-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-1.5 text-slate-200 font-medium">
+                    <Shield className="h-4 w-4 text-emerald-400" />
+                    <span>Feature Highlights</span>
+                  </div>
+                  <ul className="space-y-1 list-disc list-inside text-slate-400 leading-relaxed">
+                    <li>300+ Microsoft Edge Neural Voices across 70+ languages.</li>
+                    <li>Native English voices (<code className="text-blue-400">en-US-Jenny</code>, <code className="text-blue-400">en-US-Guy</code>, <code className="text-blue-400">en-GB-Sonia</code>) and Urdu (<code className="text-emerald-400">ur-PK-Uzma</code>, <code className="text-emerald-400">ur-PK-Asad</code>).</li>
+                    <li>Direct high-bitrate MP3 download capability.</li>
+                    <li>Zero subscriptions, 100% free forever.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       <footer className="border-t border-white/5 py-6 text-center text-xs text-slate-500">

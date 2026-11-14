@@ -559,54 +559,87 @@ export function VoiceCloneStudio() {
               />
             )}
 
-            {/* Smart Script Tag Manager (Beta) Banner for Cloning */}
+            {/* Smart Script Tag Manager (Pro) Banner for Cloning */}
             {scriptAnalysis.hasTags && (
               <div className="rounded-xl border border-purple-500/30 bg-purple-950/30 p-3.5 space-y-2.5 text-xs animate-in fade-in">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Wand2 className="w-4 h-4 text-purple-400 shrink-0" />
                     <span className="font-semibold text-purple-200">
-                      Smart Script Tag Manager (Beta)
+                      Smart Script Tag Manager
                     </span>
                     <span className="bg-purple-500/20 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-purple-500/30">
-                      {scriptAnalysis.detectedTags.length} detected
+                      {scriptAnalysis.detectedTags.length} cues
+                    </span>
+                    <span className="text-[11px] text-purple-300 font-medium bg-zinc-900/80 px-2 py-0.5 rounded-md border border-purple-800/40">
+                      🎭 {scriptAnalysis.recommendation.dominantMood}
                     </span>
                   </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={autoCleanTags}
-                      onChange={(e) => setAutoCleanTags(e.target.checked)}
-                      className="accent-purple-500 w-3.5 h-3.5 rounded cursor-pointer"
-                    />
-                    <span className="text-[11px] text-zinc-300 font-medium">Auto-Mute Tags</span>
-                  </label>
+
+                  <div className="flex items-center gap-3">
+                    {scriptAnalysis.recommendation.suggestedExaggeration !== undefined && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (scriptAnalysis.recommendation.suggestedExaggeration !== undefined) {
+                            setExaggeration(scriptAnalysis.recommendation.suggestedExaggeration);
+                          }
+                        }}
+                        className="text-[11px] bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-md flex items-center gap-1 transition cursor-pointer"
+                        title="Auto-tune Expressiveness slider to match detected script emotion"
+                      >
+                        <Sliders className="w-3 h-3 text-purple-400" />
+                        <span>Auto-Tune Dynamics ({scriptAnalysis.recommendation.suggestedExaggeration})</span>
+                      </button>
+                    )}
+
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoCleanTags}
+                        onChange={(e) => setAutoCleanTags(e.target.checked)}
+                        className="accent-purple-500 w-3.5 h-3.5 rounded cursor-pointer"
+                      />
+                      <span className="text-[11px] text-zinc-300 font-medium">Auto-Mute Tags</span>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Detected Tag Badges */}
+                {/* Detected Tag Badges with Rich Taxonomy */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
-                  {scriptAnalysis.detectedTags.map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono border ${
-                        tag.action === "pause"
-                          ? "bg-amber-950/40 text-amber-300 border-amber-800/50"
-                          : "bg-purple-950/50 text-purple-300 border-purple-800/50"
-                      }`}
-                    >
-                      {tag.action === "pause" ? (
-                        <Clock className="w-3 h-3 text-amber-400" />
-                      ) : (
-                        <VolumeX className="w-3 h-3 text-purple-400" />
-                      )}
-                      <span>{tag.raw}</span>
-                      <span className="opacity-75 text-[10px]">
-                        {tag.action === "pause"
-                          ? `(${((tag.pauseDurationMs || 1000) / 1000).toFixed(1)}s pause)`
-                          : "(muted)"}
+                  {scriptAnalysis.detectedTags.map((tag, idx) => {
+                    const badgeColor =
+                      tag.category === "pause"
+                        ? "bg-amber-950/40 text-amber-300 border-amber-800/50"
+                        : tag.category === "emotion"
+                        ? "bg-purple-950/50 text-purple-300 border-purple-800/50"
+                        : tag.category === "delivery"
+                        ? "bg-cyan-950/50 text-cyan-300 border-cyan-800/50"
+                        : tag.category === "reaction"
+                        ? "bg-rose-950/50 text-rose-300 border-rose-800/50"
+                        : "bg-zinc-800 text-zinc-300 border-zinc-700";
+
+                    return (
+                      <span
+                        key={idx}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono border ${badgeColor}`}
+                      >
+                        {tag.category === "pause" ? (
+                          <Clock className="w-3 h-3 text-amber-400" />
+                        ) : tag.category === "emotion" ? (
+                          <Sparkles className="w-3 h-3 text-purple-400" />
+                        ) : (
+                          <VolumeX className="w-3 h-3 text-zinc-400" />
+                        )}
+                        <span>{tag.raw}</span>
+                        <span className="opacity-75 text-[10px]">
+                          {tag.category === "pause"
+                            ? `(${((tag.pauseDurationMs || 1000) / 1000).toFixed(1)}s)`
+                            : tag.description ? `(${tag.description})` : "(muted)"}
+                        </span>
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

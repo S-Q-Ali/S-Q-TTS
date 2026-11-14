@@ -29,7 +29,16 @@ import {
   Layers,
   Zap,
   Activity,
+  Gauge,
 } from "lucide-react";
+
+interface VoicePaceAnalysis {
+  duration_sec: number;
+  sps: number;
+  wpm: number;
+  pace_label: string;
+  recommended_speed: number;
+}
 
 export function VoiceCloneStudio() {
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
@@ -46,6 +55,10 @@ export function VoiceCloneStudio() {
   const [selectedSavedVoice, setSelectedSavedVoice] = useState<string>("");
   const [exaggeration, setExaggeration] = useState<number>(0.5);
   const [cfgWeight, setCfgWeight] = useState<number>(0.5);
+  const [speed, setSpeed] = useState<number>(1.0);
+  const [autoMatchPace, setAutoMatchPace] = useState<boolean>(true);
+  const [isAnalyzingPace, setIsAnalyzingPace] = useState<boolean>(false);
+  const [paceAnalysis, setPaceAnalysis] = useState<VoicePaceAnalysis | null>(null);
   const [autoCleanTags, setAutoCleanTags] = useState<boolean>(true);
   const [showPreview, setShowPreview] = useState<boolean>(false);
 
@@ -99,6 +112,41 @@ export function VoiceCloneStudio() {
     checkHealth();
   }, []);
 
+  // Rapid Reference Voice Pace Analyzer
+  const analyzeReferenceVoice = async (file?: File | null, savedName?: string) => {
+    const targetFile = file !== undefined ? file : audioFile;
+    const targetSaved = savedName !== undefined ? savedName : selectedSavedVoice;
+
+    if (!targetFile && !targetSaved) return;
+
+    try {
+      setIsAnalyzingPace(true);
+      const fd = new FormData();
+      if (targetFile) {
+        fd.append("speaker_wav", targetFile);
+      } else if (targetSaved) {
+        fd.append("voice_name", targetSaved);
+      }
+
+      const res = await fetch("/api/clone/analyze", {
+        method: "POST",
+        body: fd,
+      });
+
+      if (res.ok) {
+        const data: VoicePaceAnalysis = await res.json();
+        setPaceAnalysis(data);
+        if (autoMatchPace && data.recommended_speed) {
+          setSpeed(data.recommended_speed);
+        }
+      }
+    } catch (err) {
+      console.warn("Pace analysis warning:", err);
+    } finally {
+      setIsAnalyzingPace(false);
+    }
+  };
+
   // Handle file select
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -108,6 +156,7 @@ export function VoiceCloneStudio() {
       setSaveSuccessMsg(null);
       const url = URL.createObjectURL(file);
       setAudioPreviewUrl(url);
+      analyzeReferenceVoice(file, "");
     }
   };
 
@@ -134,6 +183,7 @@ export function VoiceCloneStudio() {
         const url = URL.createObjectURL(audioBlob);
         setAudioPreviewUrl(url);
         stream.getTracks().forEach((track) => track.stop());
+        analyzeReferenceVoice(file, "");
       };
 
       mediaRecorderRef.current = recorder;
@@ -226,6 +276,7 @@ export function VoiceCloneStudio() {
       formData.append("text", text.trim());
       formData.append("exaggeration", exaggeration.toString());
       formData.append("cfg_weight", cfgWeight.toString());
+      formData.append("speed", speed.toString());
       formData.append("auto_clean", autoCleanTags ? "true" : "false");
 
       if (audioFile) {
@@ -437,10 +488,16 @@ export function VoiceCloneStudio() {
                   <select
                     value={selectedSavedVoice}
                     onChange={(e) => {
-                      setSelectedSavedVoice(e.target.value);
+                      const val = e.target.value;
+                      setSelectedSavedVoice(val);
                       setAudioFile(null);
                       setAudioPreviewUrl(null);
                       setSaveSuccessMsg(null);
+                      if (val) {
+                        analyzeReferenceVoice(null, val);
+                      } else {
+                        setPaceAnalysis(null);
+                      }
                     }}
                     className="w-full bg-zinc-800/80 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
                   >
@@ -456,13 +513,13 @@ export function VoiceCloneStudio() {
             </div>
 
             {/* Voice Tuning Parameters */}
-            <div className="pt-3 border-t border-zinc-800 space-y-3">
+            <div className="pt-3 border-t border-zinc-800 space-y-3.5">
               <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-purple-400" />
-                Acoustic Dynamics
+                Acoustic Dynamics & Pacing
               </span>
 
-              {/* Exaggeration Slider */}
+              {/* Expressiveness Slider */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-zinc-400">
                   <span>Expressiveness / Exaggeration</span>
@@ -494,6 +551,109 @@ export function VoiceCloneStudio() {
                   onChange={(e) => setCfgWeight(parseFloat(e.target.value))}
                   className="w-full accent-purple-500 cursor-pointer"
                 />
+              </div>
+
+              {/* Speaking Speed & Auto-Pace Engine */}
+              <div className="space-y-1.5 pt-2 border-t border-zinc-800/60">
+                <div className="flex justify-between items-center text-[11px] text-zinc-400">
+                  <span className="flex items-center gap-1 font-medium text-zinc-300">
+                    <Gauge className="w-3.5 h-3.5 text-cyan-400" />
+                    Speaking Rate / Speed
+                  </span>
+                  <span className="text-cyan-400 font-mono font-medium">
+                    {speed.toFixed(2)}x {speed < 0.95 ? "(Slow)" : speed > 1.05 ? "(Fast)" : "(Normal)"}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.75"
+                  max="1.35"
+                  step="0.05"
+                  value={speed}
+                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-400 cursor-pointer"
+                />
+
+                {/* Quick Speed Presets */}
+                <div className="grid grid-cols-4 gap-1 pt-0.5">
+                  {[
+                    { label: "0.85x", sub: "Slow", val: 0.85 },
+                    { label: "1.00x", sub: "Normal", val: 1.0 },
+                    { label: "1.15x", sub: "Upbeat", val: 1.15 },
+                    { label: "1.25x", sub: "Fast", val: 1.25 },
+                  ].map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setSpeed(p.val)}
+                      className={`text-[10px] py-1 px-1 rounded transition text-center ${
+                        Math.abs(speed - p.val) < 0.02
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold"
+                          : "bg-zinc-800/60 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div>{p.label}</div>
+                      <div className="text-[9px] opacity-70">{p.sub}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Auto-Match Reference Pace Card */}
+                <div className="mt-2.5 p-2.5 rounded-lg bg-zinc-950/70 border border-zinc-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] font-medium text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={autoMatchPace}
+                        onChange={(e) => {
+                          const nextVal = e.target.checked;
+                          setAutoMatchPace(nextVal);
+                          if (nextVal && paceAnalysis?.recommended_speed) {
+                            setSpeed(paceAnalysis.recommended_speed);
+                          }
+                        }}
+                        className="accent-cyan-400 w-3.5 h-3.5 rounded cursor-pointer"
+                      />
+                      <span className="flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-cyan-400" />
+                        Auto-Match Reference Pace
+                      </span>
+                    </label>
+
+                    {(audioFile || selectedSavedVoice) && (
+                      <button
+                        type="button"
+                        onClick={() => analyzeReferenceVoice()}
+                        disabled={isAnalyzingPace}
+                        className="text-[10px] text-cyan-400 hover:text-cyan-300 font-medium disabled:opacity-50 cursor-pointer"
+                      >
+                        {isAnalyzingPace ? "Analyzing..." : "Re-check"}
+                      </button>
+                    )}
+                  </div>
+
+                  {isAnalyzingPace ? (
+                    <div className="flex items-center gap-2 text-[10px] text-zinc-400 py-1">
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-400" />
+                      <span>Detecting speech tempo & syllables from reference audio (~0.2s)...</span>
+                    </div>
+                  ) : paceAnalysis ? (
+                    <div className="text-[10px] text-zinc-400 space-y-1 bg-zinc-900/60 p-2 rounded border border-zinc-800">
+                      <div className="flex items-center justify-between text-zinc-300">
+                        <span>Pace: <span className="text-cyan-300 font-medium">{paceAnalysis.pace_label}</span></span>
+                        <span className="font-mono text-zinc-400">{paceAnalysis.wpm} WPM (~{paceAnalysis.sps} SPS)</span>
+                      </div>
+                      <div className="flex items-center justify-between text-zinc-400 border-t border-zinc-800/60 pt-1">
+                        <span>Auto-Set Speed:</span>
+                        <span className="text-cyan-400 font-mono font-semibold">{paceAnalysis.recommended_speed}x</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-zinc-500 italic">
+                      Upload audio or pick a voice to auto-detect speaking cadence.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

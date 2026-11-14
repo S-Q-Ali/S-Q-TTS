@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     const voiceName = formData.get("voice_name") as string | null;
     const exaggeration = formData.get("exaggeration") as string || "0.5";
     const cfgWeight = formData.get("cfg_weight") as string || "0.5";
+    const speed = formData.get("speed") as string || "1.0";
     const autoClean = formData.get("auto_clean") !== "false";
 
     if (!text || !text.trim()) {
@@ -88,6 +89,7 @@ export async function POST(req: NextRequest) {
     pyFormData.append("text", processedText);
     pyFormData.append("exaggeration", exaggeration);
     pyFormData.append("cfg_weight", cfgWeight);
+    pyFormData.append("speed", speed);
 
     let targetEndpoint = `${PYTHON_SERVER_URL}/clone-voice`;
 
@@ -135,6 +137,8 @@ export async function POST(req: NextRequest) {
         "Content-Length": audioBuffer.byteLength.toString(),
         "Content-Disposition": 'inline; filename="cloned_voice.wav"',
         "Cache-Control": "no-cache",
+        "X-Speed-Factor": pyRes.headers.get("x-speed-factor") || speed,
+        "X-Cache-Hit": pyRes.headers.get("x-cache-hit") || "none",
       },
     });
   } catch (error: any) {

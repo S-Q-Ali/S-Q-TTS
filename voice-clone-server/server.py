@@ -433,8 +433,13 @@ async def clone_voice(
             print(f"⚡ [Phase Vocoder] Applying instant time-stretch factor {speed}x...")
             wav = apply_time_stretch(wav, MODEL.sr, speed)
 
-        # Save to temp file
-        ta.save(str(temp_output), wav, MODEL.sr)
+        # Ensure correct tensor dimensions and clamp for 16-bit PCM conversion
+        if wav.dim() == 1:
+            wav = wav.unsqueeze(0)
+        wav = torch.clamp(wav, -1.0, 1.0)
+
+        # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
+        ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)
 
         # Save to Audio Cache for instant future re-runs
         try:
@@ -620,7 +625,13 @@ async def clone_with_saved_voice(
             print(f"⚡ [Phase Vocoder] Applying instant time-stretch factor {speed}x...")
             wav = apply_time_stretch(wav, MODEL.sr, speed)
 
-        ta.save(str(temp_output), wav, MODEL.sr)
+        # Ensure correct tensor dimensions and clamp for 16-bit PCM conversion
+        if wav.dim() == 1:
+            wav = wav.unsqueeze(0)
+        wav = torch.clamp(wav, -1.0, 1.0)
+
+        # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
+        ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)
 
         try:
             shutil.copyfile(temp_output, cached_audio_file)

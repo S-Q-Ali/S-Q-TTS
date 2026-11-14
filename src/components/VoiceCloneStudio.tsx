@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { parseScriptTags } from "@/lib/script-parser";
+import { AudioPlayer } from "@/components/AudioPlayer";
 import {
   Upload,
   Mic,
@@ -330,7 +331,8 @@ export function VoiceCloneStudio() {
         throw new Error(errorData.error || `Failed to clone voice (${res.status})`);
       }
 
-      const blob = await res.blob();
+      const arrayBuffer = await res.arrayBuffer();
+      const blob = new Blob([arrayBuffer], { type: "audio/wav" });
       const audioUrl = URL.createObjectURL(blob);
       setGeneratedAudioUrl(audioUrl);
       setSuccessMsg("Voice cloned and synthesized successfully!");
@@ -1051,24 +1053,17 @@ export function VoiceCloneStudio() {
               )}
             </button>
 
-            {/* Generated Audio Result Box */}
+            {/* Generated Audio Result Box with Pro AudioPlayer */}
             {generatedAudioUrl && (
-              <div className="p-4 bg-zinc-950/90 border border-purple-500/40 rounded-xl space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-purple-300 flex items-center gap-2">
-                    <Volume2 className="w-4 h-4" />
-                    Generated Cloned Audio:
-                  </span>
-                  <a
-                    href={generatedAudioUrl}
-                    download="cloned_speech.wav"
-                    className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download WAV
-                  </a>
-                </div>
-                <audio controls autoPlay src={generatedAudioUrl} className="w-full h-10" />
+              <div className="pt-2 animate-in fade-in">
+                <AudioPlayer
+                  audioUrl={generatedAudioUrl}
+                  variant="purple"
+                  format="wav"
+                  voiceLabel={selectedSavedVoice ? `Profile: ${selectedSavedVoice}` : "Custom Cloned Voice"}
+                  textSnippet={text.trim()}
+                  autoPlay={true}
+                />
               </div>
             )}
           </div>

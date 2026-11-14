@@ -8,6 +8,8 @@ interface AudioPlayerProps {
   textSnippet?: string;
   voiceLabel?: string;
   autoPlay?: boolean;
+  variant?: "brand" | "purple";
+  format?: "mp3" | "wav";
 }
 
 export function AudioPlayer({
@@ -15,21 +17,29 @@ export function AudioPlayer({
   textSnippet,
   voiceLabel,
   autoPlay = true,
+  variant = "brand",
+  format = "mp3",
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   useEffect(() => {
+    setPlaybackError(null);
     if (audioUrl && audioRef.current) {
       audioRef.current.currentTime = 0;
       if (autoPlay) {
         audioRef.current
           .play()
           .then(() => setIsPlaying(true))
-          .catch((err) => console.log("Autoplay was prevented:", err));
+          .catch((err) => {
+            // Autoplay policy prevented playback; user must click play
+            console.log("Autoplay was prevented by browser policy:", err);
+            setIsPlaying(false);
+          });
       }
     }
   }, [audioUrl, autoPlay]);
@@ -44,8 +54,15 @@ export function AudioPlayer({
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      audioRef.current.play();
-      setIsPlaying(true);
+      setPlaybackError(null);
+      audioRef.current
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => {
+          console.error("Audio playback error:", err);
+          setPlaybackError("Playback could not start. Please click Play again.");
+          setIsPlaying(false);
+        });
     }
   };
 
@@ -86,14 +103,26 @@ export function AudioPlayer({
     return `${mins}:${remaining < 10 ? "0" : ""}${remaining}`;
   };
 
+  const isPurple = variant === "purple";
+  const ext = format.toLowerCase();
+  const downloadFileName = `SQ_TTS_${(voiceLabel || "speech").replace(/\s+/g, "_")}_${Date.now()}.${ext}`;
+
   return (
-    <div className="rounded-2xl border border-brand-500/30 bg-gradient-to-b from-slate-900/90 to-slate-950/95 p-4 sm:p-5 shadow-2xl shadow-brand-500/10 space-y-3 ring-1 ring-brand-500/20">
+    <div
+      className={`rounded-2xl border p-4 sm:p-5 shadow-2xl space-y-3 ring-1 transition-all ${
+        isPurple
+          ? "border-purple-500/30 bg-gradient-to-b from-zinc-950/95 via-purple-950/20 to-zinc-950/95 ring-purple-500/20 shadow-purple-950/30"
+          : "border-brand-500/30 bg-gradient-to-b from-slate-900/90 to-slate-950/95 ring-brand-500/20 shadow-brand-500/10"
+      }`}
+    >
       <audio
         ref={audioRef}
         src={audioUrl}
+        preload="auto"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => setIsPlaying(false)}
+        onError={() => setPlaybackError("Audio playback error. Please verify the audio file.")}
       />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
@@ -101,7 +130,7 @@ export function AudioPlayer({
           <div className="flex items-center gap-2">
             <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              Audio Generated
+              {isPurple ? "Neural Voice Cloned" : "Audio Generated"}
             </span>
             {voiceLabel && (
               <span className="text-xs text-slate-400">• Voice: {voiceLabel}</span>
@@ -124,20 +153,35 @@ export function AudioPlayer({
           </button>
           <a
             href={audioUrl}
-            download={`SQ_TTS_${voiceLabel || "speech"}_${Date.now()}.mp3`}
-            className="flex items-center gap-1.5 text-xs bg-brand-600 hover:bg-brand-500 text-white font-medium px-3.5 py-1.5 rounded-lg shadow-md shadow-brand-600/30 transition-all hover:scale-105 active:scale-95"
+            download={downloadFileName}
+            className={`flex items-center gap-1.5 text-xs text-white font-medium px-3.5 py-1.5 rounded-lg shadow-md transition-all hover:scale-105 active:scale-95 ${
+              isPurple
+                ? "bg-purple-600 hover:bg-purple-500 shadow-purple-600/30"
+                : "bg-brand-600 hover:bg-brand-500 shadow-brand-600/30"
+            }`}
           >
             <Download className="h-3.5 w-3.5" />
-            <span>Download MP3</span>
+            <span>Download {ext.toUpperCase()}</span>
           </a>
         </div>
       </div>
+
+      {playbackError && (
+        <div className="text-xs text-rose-400 bg-rose-950/40 border border-rose-800/50 rounded-lg p-2">
+          {playbackError}
+        </div>
+      )}
 
       {/* Play Controls & Seek Bar */}
       <div className="flex items-center gap-3 sm:gap-4 pt-1">
         <button
           onClick={togglePlay}
-          className="h-12 w-12 rounded-xl bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center shadow-lg shadow-brand-600/30 transition-all hover:scale-105 active:scale-95 shrink-0"
+          className={`h-12 w-12 rounded-xl text-white flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95 shrink-0 ${
+            isPurple
+              ? "bg-purple-600 hover:bg-purple-500 shadow-purple-600/30"
+              : "bg-brand-600 hover:bg-brand-500 shadow-brand-600/30"
+          }`}
+          aria-label={isPlaying ? "Pause audio" : "Play audio"}
         >
           {isPlaying ? (
             <Pause className="h-5 w-5 fill-current" />
@@ -154,7 +198,11 @@ export function AudioPlayer({
             step={0.1}
             value={currentTime}
             onChange={handleSeek}
-            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-500"
+            className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
+              isPurple
+                ? "bg-zinc-800 accent-purple-500"
+                : "bg-slate-800 accent-brand-500"
+            }`}
           />
           <div className="flex justify-between text-[11px] font-mono text-slate-400">
             <span>{formatTime(currentTime)}</span>

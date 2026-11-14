@@ -37,11 +37,11 @@ os.environ["TORCH_HOME"] = str(MODELS_CACHE_DIR.resolve())
 # ─── Globals ────────────────────────────────────────────────────────
 MODEL = None
 DEVICE = None
-UPLOAD_DIR = Path("./temp_uploads")
-OUTPUT_DIR = Path("./temp_outputs")
-VOICES_DIR = Path("./saved_voices")  # Saved reference voice profiles
-EMBED_CACHE_DIR = Path("./embed_cache")  # Pre-computed speaker embeddings/conditionals cache
-AUDIO_CACHE_DIR = Path("./audio_cache")  # Pre-generated cloned audio cache (skips 100% sampling for identical requests!)
+UPLOAD_DIR = Path(__file__).parent / "temp_uploads"
+OUTPUT_DIR = Path(__file__).parent / "temp_outputs"
+VOICES_DIR = Path(__file__).parent / "saved_voices"  # Saved reference voice profiles
+EMBED_CACHE_DIR = Path(__file__).parent / "embed_cache"  # Pre-computed speaker embeddings/conditionals cache
+AUDIO_CACHE_DIR = Path(__file__).parent / "audio_cache"  # Pre-generated cloned audio cache (skips 100% sampling for identical requests!)
 
 # In-memory RAM cache for active session voice conditionals: { hash: Conditionals }
 ACTIVE_COND_CACHE = {}

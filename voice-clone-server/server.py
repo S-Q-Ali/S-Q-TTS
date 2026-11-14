@@ -15,6 +15,7 @@ import time
 import uuid
 import shutil
 import hashlib
+from typing import Optional
 import torch
 import torchaudio
 import torchaudio as ta
@@ -386,13 +387,18 @@ async def clone_voice(
             f.write(content)
 
         # ── 1. Check Full Audio Cache (Instant 0.01s hit!) ──────────
+        # Normalize float params to 2dp strings to prevent float rounding cache misses
+        # e.g. 0.5 vs 0.50 vs 0.4999... would all hash differently otherwise!
         audio_hash = compute_file_hash(temp_input)
         clean_text_key = text.strip()
-        gen_cache_key = hashlib.md5(f"{audio_hash}_{clean_text_key}_{exaggeration}_{cfg_weight}_{speed}".encode()).hexdigest()
+        norm_exag = f"{exaggeration:.2f}"
+        norm_cfg  = f"{cfg_weight:.2f}"
+        norm_spd  = f"{speed:.2f}"
+        gen_cache_key = hashlib.md5(f"{audio_hash}|{clean_text_key}|{norm_exag}|{norm_cfg}|{norm_spd}".encode()).hexdigest()
         cached_audio_file = AUDIO_CACHE_DIR / f"{gen_cache_key}.wav"
 
         if cached_audio_file.exists():
-            print(f"⚡ [Full Audio Cache HIT] Found identical synthesized audio for '{clean_text_key[:40]}...' at {speed}x (~0.01s)! Skipping sampling completely!")
+            print(f"⚡ [Full Audio Cache HIT] '{clean_text_key[:40]}...' exag={norm_exag} cfg={norm_cfg} spd={norm_spd}x (~0.01s)! Skipping sampling!")
             with open(cached_audio_file, "rb") as f:
                 cached_bytes = f.read()
             return StreamingResponse(
@@ -402,13 +408,13 @@ async def clone_voice(
                     "Content-Disposition": f'attachment; filename="cloned_{file_id}.wav"',
                     "Content-Length": str(len(cached_bytes)),
                     "X-Cache-Hit": "full_audio",
-                    "X-Speed-Factor": str(speed),
+                    "X-Speed-Factor": norm_spd,
                 },
             )
 
         # ── 2. Fresh Synthesis Pipeline ─────────────────────────────
         t_start = time.time()
-        print(f"🎤 [Pipeline Started] Text: '{clean_text_key[:50]}...' | Ref: {temp_input.name} | Speed: {speed}x")
+        print(f"🎤 [Pipeline Started] Text: '{clean_text_key[:50]}...' | Ref: {temp_input.name} | exag={norm_exag} cfg={norm_cfg} spd={norm_spd}x")
         print(f"📦 [Phase 1/3 - CPU] Loading Voice Acoustic Embeddings & Conditionals...")
         get_or_prepare_conditionals(temp_input, exaggeration=exaggeration)
 
@@ -416,7 +422,7 @@ async def clone_voice(
         print(f"🌊 [Phase 3/3 - {DEVICE}] Synthesizing Waveform via Diffusion Vocoder (1000 steps)...")
 
         wav = MODEL.generate(
-            text=text,
+            text=clean_text_key,
             audio_prompt_path=None,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
@@ -502,6 +508,44 @@ async def list_voices():
     return {"voices": voices}
 
 
+# ─── Delete Saved Voice Profile ────────────────────────────────────
+@app.delete("/delete-voice")
+@app.delete("/voices/{voice_name}")
+async def delete_voice(
+    voice_name: Optional[str] = None,
+    name: Optional[str] = None,
+):
+    """Delete a saved voice profile and purge related cached embeddings."""
+    target_name = (voice_name or name or "").strip()
+    if not target_name:
+        raise HTTPException(status_code=400, detail="Voice name is required")
+
+    deleted = False
+    if VOICES_DIR.exists():
+        for f in list(VOICES_DIR.iterdir()):
+            if f.stem == target_name:
+                try:
+                    # Invalidate in-memory RAM cache if present
+                    f_hash = compute_file_hash(f)
+                    for k in list(ACTIVE_COND_CACHE.keys()):
+                        if k.startswith(f_hash):
+                            del ACTIVE_COND_CACHE[k]
+                    # Delete disk embedding cache
+                    disk_cache_file = EMBED_CACHE_DIR / f"{f_hash}.pt"
+                    if disk_cache_file.exists():
+                        disk_cache_file.unlink(missing_ok=True)
+                    f.unlink(missing_ok=True)
+                    deleted = True
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Voice profile '{target_name}' not found")
+
+    print(f"🗑️ [Voice Deleted] Successfully removed voice profile '{target_name}'")
+    return {"status": "deleted", "name": target_name}
+
+
 # ─── Clone with Saved Voice ────────────────────────────────────────
 @app.post("/clone-saved")
 async def clone_with_saved_voice(
@@ -534,11 +578,15 @@ async def clone_with_saved_voice(
     try:
         clean_text_key = text.strip()
         voice_hash = compute_file_hash(voice_file)
-        gen_cache_key = hashlib.md5(f"{voice_hash}_{clean_text_key}_{exaggeration}_{cfg_weight}_{speed}".encode()).hexdigest()
+        # Normalize float params to 2dp to prevent float rounding cache misses
+        norm_exag = f"{exaggeration:.2f}"
+        norm_cfg  = f"{cfg_weight:.2f}"
+        norm_spd  = f"{speed:.2f}"
+        gen_cache_key = hashlib.md5(f"{voice_hash}|{clean_text_key}|{norm_exag}|{norm_cfg}|{norm_spd}".encode()).hexdigest()
         cached_audio_file = AUDIO_CACHE_DIR / f"{gen_cache_key}.wav"
 
         if cached_audio_file.exists():
-            print(f"⚡ [Full Audio Cache HIT] Found identical synthesized audio for saved voice '{voice_name}' at {speed}x (~0.01s)! Skipping sampling completely!")
+            print(f"⚡ [Full Audio Cache HIT] Saved voice '{voice_name}' exag={norm_exag} cfg={norm_cfg} spd={norm_spd}x (~0.01s)! Skipping sampling!")
             with open(cached_audio_file, "rb") as f:
                 cached_bytes = f.read()
             return StreamingResponse(
@@ -548,7 +596,7 @@ async def clone_with_saved_voice(
                     "Content-Disposition": f'attachment; filename="cloned_{file_id}.wav"',
                     "Content-Length": str(len(cached_bytes)),
                     "X-Cache-Hit": "full_audio",
-                    "X-Speed-Factor": str(speed),
+                    "X-Speed-Factor": norm_spd,
                 },
             )
 

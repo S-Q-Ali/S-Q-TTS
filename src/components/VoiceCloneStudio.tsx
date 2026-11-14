@@ -30,6 +30,8 @@ import {
   Zap,
   Activity,
   Gauge,
+  Trash2,
+  X,
 } from "lucide-react";
 
 interface VoicePaceAnalysis {
@@ -66,6 +68,10 @@ export function VoiceCloneStudio() {
   const [newVoiceName, setNewVoiceName] = useState<string>("");
   const [isSavingVoice, setIsSavingVoice] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Voice Deletion State
+  const [deletingVoice, setDeletingVoice] = useState<string | null>(null);
+  const [confirmDeleteVoice, setConfirmDeleteVoice] = useState<string | null>(null);
 
   // Script tags analysis
   const scriptAnalysis = useMemo(() => {
@@ -250,6 +256,35 @@ export function VoiceCloneStudio() {
     }
   };
 
+  // Delete Saved Voice Profile
+  const handleDeleteVoice = async (voiceName: string) => {
+    try {
+      setDeletingVoice(voiceName);
+      setError(null);
+
+      const res = await fetch(`/api/clone/delete?name=${encodeURIComponent(voiceName)}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to delete voice profile");
+      }
+
+      // If the deleted voice was selected, clear selection
+      if (selectedSavedVoice === voiceName) {
+        setSelectedSavedVoice("");
+        setPaceAnalysis(null);
+      }
+      setConfirmDeleteVoice(null);
+      await checkHealth();
+    } catch (err: any) {
+      setError(err.message || "Could not delete voice profile");
+    } finally {
+      setDeletingVoice(null);
+    }
+  };
+
   // Run Voice Cloning
   const handleCloneAndGenerate = async () => {
     if (!text.trim()) {
@@ -274,9 +309,9 @@ export function VoiceCloneStudio() {
 
       const formData = new FormData();
       formData.append("text", text.trim());
-      formData.append("exaggeration", exaggeration.toString());
-      formData.append("cfg_weight", cfgWeight.toString());
-      formData.append("speed", speed.toString());
+      formData.append("exaggeration", parseFloat(exaggeration.toFixed(2)).toString());
+      formData.append("cfg_weight", parseFloat(cfgWeight.toFixed(2)).toString());
+      formData.append("speed", parseFloat(speed.toFixed(2)).toString());
       formData.append("auto_clean", autoCleanTags ? "true" : "false");
 
       if (audioFile) {
@@ -479,35 +514,112 @@ export function VoiceCloneStudio() {
                 </div>
               )}
 
-              {/* Saved Voices Dropdown (if any exist) */}
+              {/* Pick Saved Voice with Delete Option */}
               {savedVoices.length > 0 && (
-                <div className="pt-2 border-t border-zinc-800">
-                  <label className="text-xs text-zinc-400 block mb-1.5 font-medium">
-                    Or pick from saved voice profiles:
-                  </label>
-                  <select
-                    value={selectedSavedVoice}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedSavedVoice(val);
-                      setAudioFile(null);
-                      setAudioPreviewUrl(null);
-                      setSaveSuccessMsg(null);
-                      if (val) {
-                        analyzeReferenceVoice(null, val);
-                      } else {
-                        setPaceAnalysis(null);
-                      }
-                    }}
-                    className="w-full bg-zinc-800/80 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  >
-                    <option value="">-- Select Saved Profile --</option>
-                    {savedVoices.map((v) => (
-                      <option key={v.name} value={v.name}>
-                        {v.name} ({v.size_kb} KB)
-                      </option>
-                    ))}
-                  </select>
+                <div className="pt-2 border-t border-zinc-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-zinc-400 font-medium">
+                      Or pick from saved voice profiles ({savedVoices.length}):
+                    </label>
+                    {selectedSavedVoice && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSavedVoice("");
+                          setPaceAnalysis(null);
+                        }}
+                        className="text-[11px] text-zinc-500 hover:text-zinc-300 transition"
+                      >
+                        Clear selection
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-0.5">
+                    {savedVoices.map((v) => {
+                      const isSelected = selectedSavedVoice === v.name;
+                      const isConfirming = confirmDeleteVoice === v.name;
+                      const isDeleting = deletingVoice === v.name;
+
+                      return (
+                        <div
+                          key={v.name}
+                          className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs transition-all ${
+                            isSelected
+                              ? "bg-purple-950/50 border-purple-500/70 text-purple-200 shadow-sm shadow-purple-950/30"
+                              : "bg-zinc-800/60 border-zinc-700/60 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800/90"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="flex-1 text-left flex items-center gap-2 truncate focus:outline-none"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedSavedVoice("");
+                                setPaceAnalysis(null);
+                              } else {
+                                setSelectedSavedVoice(v.name);
+                                setAudioFile(null);
+                                setAudioPreviewUrl(null);
+                                setSaveSuccessMsg(null);
+                                analyzeReferenceVoice(null, v.name);
+                              }
+                            }}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                isSelected ? "bg-purple-400 ring-2 ring-purple-400/30" : "bg-zinc-600"
+                              }`}
+                            />
+                            <span className="font-medium truncate">{v.name}</span>
+                            <span className="text-[10px] text-zinc-500 shrink-0 font-mono">
+                              ({v.size_kb} KB)
+                            </span>
+                          </button>
+
+                          {/* Delete controls */}
+                          {isConfirming ? (
+                            <div className="flex items-center gap-1.5 shrink-0 pl-1 border-l border-zinc-700">
+                              <span className="text-[10px] text-red-400 font-medium">Delete?</span>
+                              <button
+                                type="button"
+                                disabled={isDeleting}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteVoice(v.name);
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-semibold bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/40 rounded transition"
+                              >
+                                {isDeleting ? "..." : "Yes"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteVoice(null);
+                                }}
+                                className="p-0.5 text-zinc-400 hover:text-zinc-200 rounded transition"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteVoice(v.name);
+                              }}
+                              className="text-zinc-500 hover:text-red-400 p-1 rounded transition shrink-0"
+                              title={`Delete ${v.name}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

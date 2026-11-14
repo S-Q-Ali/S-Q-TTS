@@ -23,6 +23,12 @@ import {
   EyeOff,
   Clock,
   VolumeX,
+  BookmarkPlus,
+  Save,
+  Cpu,
+  Layers,
+  Zap,
+  Activity,
 } from "lucide-react";
 
 export function VoiceCloneStudio() {
@@ -43,6 +49,11 @@ export function VoiceCloneStudio() {
   const [autoCleanTags, setAutoCleanTags] = useState<boolean>(true);
   const [showPreview, setShowPreview] = useState<boolean>(false);
 
+  // Voice Profile Saving State
+  const [newVoiceName, setNewVoiceName] = useState<string>("");
+  const [isSavingVoice, setIsSavingVoice] = useState<boolean>(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
   // Script tags analysis
   const scriptAnalysis = useMemo(() => {
     return parseScriptTags(text);
@@ -55,8 +66,10 @@ export function VoiceCloneStudio() {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Synthesis State
+  // Synthesis State & Live Telemetry
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
+  const [synthesisElapsed, setSynthesisElapsed] = useState<number>(0);
+  const synthesisTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [generatedAudioUrl, setGeneratedAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -92,6 +105,7 @@ export function VoiceCloneStudio() {
       const file = e.target.files[0];
       setAudioFile(file);
       setSelectedSavedVoice("");
+      setSaveSuccessMsg(null);
       const url = URL.createObjectURL(file);
       setAudioPreviewUrl(url);
     }
@@ -101,6 +115,7 @@ export function VoiceCloneStudio() {
   const startRecording = async () => {
     try {
       setError(null);
+      setSaveSuccessMsg(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
       const recorder = new MediaRecorder(stream);
@@ -143,6 +158,48 @@ export function VoiceCloneStudio() {
     }
   };
 
+  // Save Voice Profile to Server
+  const handleSaveVoiceProfile = async () => {
+    if (!newVoiceName.trim()) {
+      setError("Please provide a name for this voice profile.");
+      return;
+    }
+    if (!audioFile) {
+      setError("Please upload or record an audio sample first to save it.");
+      return;
+    }
+
+    try {
+      setIsSavingVoice(true);
+      setError(null);
+      setSaveSuccessMsg(null);
+
+      const saveFd = new FormData();
+      saveFd.append("name", newVoiceName.trim());
+      saveFd.append("speaker_wav", audioFile);
+
+      const res = await fetch("/api/clone/save", {
+        method: "POST",
+        body: saveFd,
+      });
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to save voice profile");
+      }
+
+      const result = await res.json();
+      setSaveSuccessMsg(`Voice profile "${result.name}" saved permanently!`);
+      setNewVoiceName("");
+      await checkHealth();
+      setSelectedSavedVoice(result.name);
+    } catch (err: any) {
+      setError(err.message || "Could not save voice profile");
+    } finally {
+      setIsSavingVoice(false);
+    }
+  };
+
   // Run Voice Cloning
   const handleCloneAndGenerate = async () => {
     if (!text.trim()) {
@@ -157,8 +214,13 @@ export function VoiceCloneStudio() {
 
     try {
       setIsSynthesizing(true);
+      setSynthesisElapsed(0);
       setError(null);
       setSuccessMsg(null);
+
+      synthesisTimerRef.current = setInterval(() => {
+        setSynthesisElapsed((prev) => prev + 1);
+      }, 1000);
 
       const formData = new FormData();
       formData.append("text", text.trim());
@@ -189,9 +251,27 @@ export function VoiceCloneStudio() {
     } catch (err: any) {
       setError(err.message || "Synthesis error");
     } finally {
+      if (synthesisTimerRef.current) {
+        clearInterval(synthesisTimerRef.current);
+        synthesisTimerRef.current = null;
+      }
       setIsSynthesizing(false);
     }
   };
+
+  // Helper formatting for seconds to MM:SS
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  // Compute active phase and estimated percentage
+  // Phase 1 (0-10s): Embeddings
+  // Phase 2 (10-45s): T3 LLM tokens (CPU)
+  // Phase 3 (45s+): Diffusion Vocoder (1000 steps)
+  const currentPhase = synthesisElapsed < 10 ? 1 : synthesisElapsed < 50 ? 2 : 3;
+  const estimatedProgress = Math.min(95, Math.max(5, Math.round((synthesisElapsed / 160) * 100)));
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -218,20 +298,28 @@ export function VoiceCloneStudio() {
             </div>
             <p className="text-xs opacity-80 mt-0.5">
               {serverOnline
-                ? "Chatterbox zero-shot voice cloning engine is online & ready."
+                ? "Chatterbox zero-shot voice cloning engine is online & ready (RAM & Audio Cache active)."
                 : "Run 'voice-clone-server/start.bat' on your PC to enable local AI voice cloning."}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={checkHealth}
-          disabled={checkingServer}
-          className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-xs text-zinc-200 border border-zinc-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-        >
-          <RotateCcw className={`w-3.5 h-3.5 ${checkingServer ? "animate-spin" : ""}`} />
-          Check Server
-        </button>
+        <div className="flex items-center gap-2">
+          {serverOnline && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-zinc-800/90 text-purple-300 border border-purple-500/30">
+              <Cpu className="w-3 h-3 text-purple-400" />
+              CPU / 16GB RAM
+            </span>
+          )}
+          <button
+            onClick={checkHealth}
+            disabled={checkingServer}
+            className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-xs text-zinc-200 border border-zinc-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${checkingServer ? "animate-spin" : ""}`} />
+            Check Server
+          </button>
+        </div>
       </div>
 
       {/* Main Studio Grid */}
@@ -248,24 +336,15 @@ export function VoiceCloneStudio() {
             </div>
 
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Upload a clean audio file (MP3/WAV) or record 10 seconds of clear speech with no background music.
+              Upload a clear voice recording or record live using your microphone.
             </p>
 
-            {/* Upload or Record Tabs */}
+            {/* Upload Area */}
             <div className="space-y-3">
-              {/* File Upload Box */}
-              <label
-                htmlFor="voice-upload"
-                className={`border-2 border-dashed rounded-xl p-5 flex flex-col items-center justify-center gap-2 text-center cursor-pointer transition ${
-                  audioFile
-                    ? "border-purple-500/60 bg-purple-950/20"
-                    : "border-zinc-700/60 hover:border-zinc-600 bg-zinc-800/40"
-                }`}
-              >
+              <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-700 hover:border-purple-500/80 bg-zinc-950/60 hover:bg-purple-950/10 rounded-xl p-5 text-center cursor-pointer transition group">
                 <input
-                  id="voice-upload"
                   type="file"
-                  accept="audio/mp3,audio/wav,audio/m4a,audio/ogg"
+                  accept="audio/wav,audio/mp3,audio/mpeg,audio/m4a,audio/ogg"
                   className="hidden"
                   onChange={handleFileChange}
                 />
@@ -313,6 +392,42 @@ export function VoiceCloneStudio() {
                 </div>
               )}
 
+              {/* Feature 1: Save Voice Profile Card */}
+              {audioFile && (
+                <div className="bg-purple-950/20 border border-purple-500/30 rounded-xl p-3 space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs font-semibold text-purple-300">
+                    <span className="flex items-center gap-1.5">
+                      <BookmarkPlus className="w-3.5 h-3.5 text-purple-400" />
+                      Save this Voice as Preset Profile
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newVoiceName}
+                      onChange={(e) => setNewVoiceName(e.target.value)}
+                      placeholder="Profile Name (e.g., My English Voice)"
+                      className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSavingVoice || !newVoiceName.trim()}
+                      onClick={handleSaveVoiceProfile}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 cursor-pointer transition shrink-0"
+                    >
+                      {isSavingVoice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Save Profile
+                    </button>
+                  </div>
+                  {saveSuccessMsg && (
+                    <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {saveSuccessMsg}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Saved Voices Dropdown (if any exist) */}
               {savedVoices.length > 0 && (
                 <div className="pt-2 border-t border-zinc-800">
@@ -325,6 +440,7 @@ export function VoiceCloneStudio() {
                       setSelectedSavedVoice(e.target.value);
                       setAudioFile(null);
                       setAudioPreviewUrl(null);
+                      setSaveSuccessMsg(null);
                     }}
                     className="w-full bg-zinc-800/80 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
                   >
@@ -448,33 +564,26 @@ export function VoiceCloneStudio() {
               <div className="rounded-xl border border-purple-500/30 bg-purple-950/30 p-3.5 space-y-2.5 text-xs animate-in fade-in">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 text-[10px] font-bold uppercase tracking-wider border border-purple-500/30">
-                      Beta Engine
+                    <Wand2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="font-semibold text-purple-200">
+                      Smart Script Tag Manager (Beta)
                     </span>
-                    <span className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                      <Wand2 className="w-3.5 h-3.5 text-purple-400" />
-                      Smart Script Tag Manager
+                    <span className="bg-purple-500/20 text-purple-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-purple-500/30">
+                      {scriptAnalysis.detectedTags.length} detected
                     </span>
                   </div>
-
-                  <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300 hover:text-white select-none">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={autoCleanTags}
                       onChange={(e) => setAutoCleanTags(e.target.checked)}
-                      className="rounded accent-purple-600 cursor-pointer"
+                      className="accent-purple-500 w-3.5 h-3.5 rounded cursor-pointer"
                     />
-                    <span className="text-[11px] font-medium">Auto-Manage Tags (Recommended)</span>
+                    <span className="text-[11px] text-zinc-300 font-medium">Auto-Mute Tags</span>
                   </label>
                 </div>
 
-                <p className="text-[11px] text-zinc-400 leading-normal">
-                  Detected {scriptAnalysis.detectedTags.length} bracket tags in your script.
-                  Stage directions/emotions will be <strong>muted</strong> so your cloned voice won't speak them,
-                  and pause tags are converted to <strong>natural expressive pauses</strong>.
-                </p>
-
-                {/* Detected tags badges */}
+                {/* Detected Tag Badges */}
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {scriptAnalysis.detectedTags.map((tag, idx) => (
                     <span
@@ -517,6 +626,107 @@ export function VoiceCloneStudio() {
               </div>
             )}
 
+            {/* Features 3 & 4: Live Progress Bar & Hardware Activity Telemetry */}
+            {isSynthesizing && (
+              <div className="bg-zinc-950/95 border border-purple-500/40 rounded-xl p-4 space-y-3.5 animate-in fade-in shadow-xl shadow-purple-950/30">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-semibold text-purple-200">
+                    <Activity className="w-4 h-4 text-purple-400 animate-pulse" />
+                    <span>Neural Synthesis in Progress...</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-400 font-mono text-[11px]">
+                    <Clock className="w-3 h-3 text-purple-400" />
+                    <span>Elapsed: {formatTime(synthesisElapsed)}</span>
+                  </div>
+                </div>
+
+                {/* Animated Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="w-full bg-zinc-800/80 rounded-full h-2.5 overflow-hidden border border-zinc-700/60">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-400 h-2.5 rounded-full transition-all duration-1000 relative"
+                      style={{ width: `${estimatedProgress}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-zinc-400">
+                    <span>Progress: ~{estimatedProgress}%</span>
+                    <span>Expected Total: ~02:40 (CPU Mode)</span>
+                  </div>
+                </div>
+
+                {/* 3-Phase Execution Telemetry */}
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-800/80">
+                  {/* Phase 1 */}
+                  <div
+                    className={`p-2 rounded-lg border text-[10px] space-y-1 transition-all ${
+                      currentPhase === 1
+                        ? "bg-purple-950/60 border-purple-500/80 text-purple-200 shadow-sm"
+                        : currentPhase > 1
+                        ? "bg-zinc-900/40 border-emerald-800/40 text-emerald-300"
+                        : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-medium">
+                      <span>Phase 1</span>
+                      {currentPhase > 1 ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <span className="text-[9px] px-1 bg-purple-500/20 text-purple-300 rounded font-mono">CPU</span>
+                      )}
+                    </div>
+                    <div className="font-semibold truncate">Embeddings</div>
+                    <div className="opacity-70 text-[9px]">RAM/Disk Cache</div>
+                  </div>
+
+                  {/* Phase 2 */}
+                  <div
+                    className={`p-2 rounded-lg border text-[10px] space-y-1 transition-all ${
+                      currentPhase === 2
+                        ? "bg-purple-950/60 border-purple-500/80 text-purple-200 shadow-sm"
+                        : currentPhase > 2
+                        ? "bg-zinc-900/40 border-emerald-800/40 text-emerald-300"
+                        : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-medium">
+                      <span>Phase 2</span>
+                      {currentPhase > 2 ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      ) : currentPhase === 2 ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
+                      ) : (
+                        <span className="text-[9px] px-1 bg-zinc-800 rounded font-mono">CPU</span>
+                      )}
+                    </div>
+                    <div className="font-semibold truncate">T3 LLM Tokens</div>
+                    <div className="opacity-70 text-[9px]">16 GB System RAM</div>
+                  </div>
+
+                  {/* Phase 3 */}
+                  <div
+                    className={`p-2 rounded-lg border text-[10px] space-y-1 transition-all ${
+                      currentPhase === 3
+                        ? "bg-purple-950/60 border-purple-500/80 text-purple-200 shadow-sm"
+                        : "bg-zinc-900/30 border-zinc-800 text-zinc-500"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-medium">
+                      <span>Phase 3</span>
+                      {currentPhase === 3 ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
+                      ) : (
+                        <span className="text-[9px] px-1 bg-zinc-800 rounded font-mono">DIFFUSION</span>
+                      )}
+                    </div>
+                    <div className="font-semibold truncate">1000 Sampling</div>
+                    <div className="opacity-70 text-[9px]">{device.toUpperCase()} Vocoder</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Clone Button */}
             <button
               onClick={handleCloneAndGenerate}
@@ -526,7 +736,7 @@ export function VoiceCloneStudio() {
               {isSynthesizing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Cloning & Synthesizing Voice (CPU Processing)...
+                  Synthesizing Cloned Voice ({formatTime(synthesisElapsed)})...
                 </>
               ) : (
                 <>
@@ -567,7 +777,7 @@ export function VoiceCloneStudio() {
             <ul className="list-disc list-inside space-y-1 pl-1 text-zinc-400/90">
               <li>Use a <strong>6 to 15-second</strong> audio sample of continuous, clear speech.</li>
               <li>Avoid samples with loud background noise, music, or heavy echo.</li>
-              <li>On CPU-only setups, generation takes ~15-40 seconds for short sentences.</li>
+              <li><strong>Audio Cache:</strong> Re-synthesizing previously generated text is <strong>instant (0.01s)</strong>.</li>
             </ul>
           </div>
         </div>

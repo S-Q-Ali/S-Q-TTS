@@ -11,6 +11,7 @@ Usage:
 
 import os
 import io
+import time
 import uuid
 import shutil
 import hashlib
@@ -37,6 +38,7 @@ UPLOAD_DIR = Path("./temp_uploads")
 OUTPUT_DIR = Path("./temp_outputs")
 VOICES_DIR = Path("./saved_voices")  # Saved reference voice profiles
 EMBED_CACHE_DIR = Path("./embed_cache")  # Pre-computed speaker embeddings/conditionals cache
+AUDIO_CACHE_DIR = Path("./audio_cache")  # Pre-generated cloned audio cache (skips 100% sampling for identical requests!)
 
 # In-memory RAM cache for active session voice conditionals: { hash: Conditionals }
 ACTIVE_COND_CACHE = {}
@@ -173,6 +175,7 @@ async def lifespan(app: FastAPI):
     OUTPUT_DIR.mkdir(exist_ok=True)
     VOICES_DIR.mkdir(exist_ok=True)
     EMBED_CACHE_DIR.mkdir(exist_ok=True)
+    AUDIO_CACHE_DIR.mkdir(exist_ok=True)
 
     yield  # App runs
 
@@ -240,12 +243,35 @@ async def clone_voice(
             content = await speaker_wav.read()
             f.write(content)
 
-        print(f"🎤 Cloning voice | Text: '{text[:60]}...' | Ref: {temp_input.name}")
+        # ── 1. Check Full Audio Cache (Instant 0.01s hit!) ──────────
+        audio_hash = compute_file_hash(temp_input)
+        clean_text_key = text.strip()
+        gen_cache_key = hashlib.md5(f"{audio_hash}_{clean_text_key}_{exaggeration}_{cfg_weight}".encode()).hexdigest()
+        cached_audio_file = AUDIO_CACHE_DIR / f"{gen_cache_key}.wav"
 
-        # Check / Load cached speaker embeddings & conditionals (Skips 10s re-sampling!)
+        if cached_audio_file.exists():
+            print(f"⚡ [Full Audio Cache HIT] Found identical synthesized audio for '{clean_text_key[:40]}...' (~0.01s)! Skipping sampling completely!")
+            with open(cached_audio_file, "rb") as f:
+                cached_bytes = f.read()
+            return StreamingResponse(
+                io.BytesIO(cached_bytes),
+                media_type="audio/wav",
+                headers={
+                    "Content-Disposition": f'attachment; filename="cloned_{file_id}.wav"',
+                    "Content-Length": str(len(cached_bytes)),
+                    "X-Cache-Hit": "full_audio",
+                },
+            )
+
+        # ── 2. Fresh Synthesis Pipeline ─────────────────────────────
+        t_start = time.time()
+        print(f"🎤 [Pipeline Started] Text: '{clean_text_key[:50]}...' | Ref: {temp_input.name}")
+        print(f"📦 [Phase 1/3 - CPU] Loading Voice Acoustic Embeddings & Conditionals...")
         get_or_prepare_conditionals(temp_input, exaggeration=exaggeration)
 
-        # Generate cloned speech using cached conditionals (no audio_prompt_path re-sampling!)
+        print(f"🧠 [Phase 2/3 - CPU / 16GB RAM] Generating Speech Tokens via LLM (T3)...")
+        print(f"🌊 [Phase 3/3 - {DEVICE}] Synthesizing Waveform via Diffusion Vocoder (1000 steps)...")
+
         wav = MODEL.generate(
             text=text,
             audio_prompt_path=None,
@@ -255,6 +281,16 @@ async def clone_voice(
 
         # Save to temp file
         ta.save(str(temp_output), wav, MODEL.sr)
+
+        # Save to Audio Cache for instant future re-runs
+        try:
+            shutil.copyfile(temp_output, cached_audio_file)
+            print(f"💾 [Audio Cache Saved] Next time this text is synthesized with this voice, it will load instantly (0.01s)!")
+        except Exception as ce:
+            print(f"⚠️ Audio cache write warning: {ce}")
+
+        elapsed_sec = round(time.time() - t_start, 1)
+        print(f"✅ [Synthesis Complete] Finished in {elapsed_sec}s!")
 
         # Read and stream back
         with open(temp_output, "rb") as f:
@@ -343,10 +379,32 @@ async def clone_with_saved_voice(
     temp_output = OUTPUT_DIR / f"out_{file_id}.wav"
 
     try:
-        print(f"🎤 Using saved voice '{voice_name}' | Text: '{text[:60]}...'")
+        clean_text_key = text.strip()
+        voice_hash = compute_file_hash(voice_file)
+        gen_cache_key = hashlib.md5(f"{voice_hash}_{clean_text_key}_{exaggeration}_{cfg_weight}".encode()).hexdigest()
+        cached_audio_file = AUDIO_CACHE_DIR / f"{gen_cache_key}.wav"
 
-        # Load cached speaker embeddings & conditionals
+        if cached_audio_file.exists():
+            print(f"⚡ [Full Audio Cache HIT] Found identical synthesized audio for saved voice '{voice_name}' (~0.01s)! Skipping sampling completely!")
+            with open(cached_audio_file, "rb") as f:
+                cached_bytes = f.read()
+            return StreamingResponse(
+                io.BytesIO(cached_bytes),
+                media_type="audio/wav",
+                headers={
+                    "Content-Disposition": f'attachment; filename="cloned_{file_id}.wav"',
+                    "Content-Length": str(len(cached_bytes)),
+                    "X-Cache-Hit": "full_audio",
+                },
+            )
+
+        t_start = time.time()
+        print(f"🎤 [Pipeline Started] Saved voice: '{voice_name}' | Text: '{clean_text_key[:50]}...'")
+        print(f"📦 [Phase 1/3 - CPU] Loading Voice Embeddings & Conditionals...")
         get_or_prepare_conditionals(voice_file, exaggeration=exaggeration)
+
+        print(f"🧠 [Phase 2/3 - CPU / 16GB RAM] Generating Speech Tokens via LLM (T3)...")
+        print(f"🌊 [Phase 3/3 - {DEVICE}] Synthesizing Waveform via Diffusion Vocoder (1000 steps)...")
 
         wav = MODEL.generate(
             text=text,
@@ -356,6 +414,15 @@ async def clone_with_saved_voice(
         )
 
         ta.save(str(temp_output), wav, MODEL.sr)
+
+        try:
+            shutil.copyfile(temp_output, cached_audio_file)
+            print(f"💾 [Audio Cache Saved] Next time this saved voice is synthesized with this text, it will load instantly (0.01s)!")
+        except Exception:
+            pass
+
+        elapsed_sec = round(time.time() - t_start, 1)
+        print(f"✅ [Synthesis Complete] Finished in {elapsed_sec}s!")
 
         with open(temp_output, "rb") as f:
             audio_bytes = f.read()

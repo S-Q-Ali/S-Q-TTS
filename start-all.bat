@@ -1,13 +1,13 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 title S-Q-TTS Studio - Unified Engine
 
 echo.
-echo  ╔═══════════════════════════════════════════════════════════════╗
-echo  ║               S-Q-TTS STUDIO - UNIFIED RUNNER                 ║
-echo  ║       Frontend (Next.js 3000) + Backend (FastAPI 8001)        ║
-echo  ║                [Single Terminal Dashboard]                    ║
-echo  ╚═══════════════════════════════════════════════════════════════╝
+echo  =============================================================
+echo                 S-Q-TTS STUDIO - UNIFIED RUNNER
+echo         Frontend (Next.js 3000) + Backend (FastAPI 8001)
+echo                  [Single Terminal Dashboard]
+echo  =============================================================
 echo.
 
 :: 1. Validate Python Environment
@@ -42,9 +42,9 @@ start /b "" powershell -NoProfile -Command "Start-Sleep -Seconds 5; Start-Proces
 echo  [2/2] Launching AI Backend and Next.js Studio together...
 echo.
 echo  =============================================================
-echo   • Frontend App:   http://localhost:3000 (Opening in browser...)
-echo   • Backend Server: http://localhost:8001
-echo   • API Swagger:    http://localhost:8001/docs
+echo   - Frontend App:   http://localhost:3000 (Opening in browser...)
+echo   - Backend Server: http://localhost:8001
+echo   - API Swagger:    http://localhost:8001/docs
 echo.
 echo   Press CTRL+C anytime in this window to stop BOTH servers.
 echo  =============================================================
@@ -52,3 +52,8 @@ echo.
 
 cd /d "%~dp0"
 call npm run dev:all
+if errorlevel 1 (
+    echo.
+    echo  [ERROR] Server process stopped with an error code.
+    pause
+)

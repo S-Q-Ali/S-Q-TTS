@@ -1,4 +1,5 @@
 @echo off
+setlocal
 title S-Q-TTS Studio - Silent Background Launcher
 
 echo  Starting S-Q-TTS Studio in background (Zero Terminals)...
@@ -15,7 +16,7 @@ powershell -NoProfile -Command "Start-Process -FilePath 'npm.cmd' -ArgumentList 
 :: Wait 4s and open browser
 powershell -NoProfile -Command "Start-Sleep -Seconds 4; Start-Process 'http://localhost:3000'"
 
-echo  ✅ S-Q-TTS is running silently in the background!
+echo  [SUCCESS] S-Q-TTS is running silently in the background!
 echo  Use 'stop-all.bat' to stop servers anytime.
 timeout /t 3 /nobreak >nul
 exit /b 0

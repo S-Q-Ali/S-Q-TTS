@@ -1,4 +1,5 @@
 @echo off
+setlocal
 title S-Q-TTS Studio - Split Windows Terminal
 
 :: Check if wt.exe is available

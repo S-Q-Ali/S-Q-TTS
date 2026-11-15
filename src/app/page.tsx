@@ -55,6 +55,44 @@ export default function Home() {
     fetchVoices();
   }, []);
 
+  // ─── LocalStorage Persistence for Standard TTS Settings ───────────
+  const TTS_STORAGE_KEY = "sq_tts_standard_settings_v1";
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TTS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.text === "string" && parsed.text.trim()) setText(parsed.text);
+        if (typeof parsed.selectedVoice === "string") setSelectedVoice(parsed.selectedVoice);
+        if (typeof parsed.rate === "number") setRate(parsed.rate);
+        if (typeof parsed.pitch === "number") setPitch(parsed.pitch);
+        if (typeof parsed.volume === "number") setVolume(parsed.volume);
+        if (typeof parsed.autoCleanTags === "boolean") setAutoCleanTags(parsed.autoCleanTags);
+        if (parsed.activeTab === "tts" || parsed.activeTab === "clone") setActiveTab(parsed.activeTab);
+      }
+    } catch (e) {
+      console.warn("Could not load standard TTS settings:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const settings = {
+        text,
+        selectedVoice,
+        rate,
+        pitch,
+        volume,
+        autoCleanTags,
+        activeTab,
+      };
+      localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn("Could not save standard TTS settings to localStorage:", e);
+    }
+  }, [text, selectedVoice, rate, pitch, volume, autoCleanTags, activeTab]);
+
   // Apply a Voice Preset (Acoustic sound profile: Voice + Rate + Pitch + Volume)
   // Leaves the user's text untouched!
   const handleApplyVoicePreset = (preset: VoicePreset) => {

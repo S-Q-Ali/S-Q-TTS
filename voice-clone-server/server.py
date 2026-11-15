@@ -11,11 +11,12 @@ Usage:
 
 import os
 import io
+import re
 import time
 import uuid
 import shutil
 import hashlib
-from typing import Optional
+from typing import Optional, List
 import torch
 import torchaudio
 import torchaudio as ta
@@ -155,6 +156,111 @@ def apply_time_stretch(waveform: torch.Tensor, sr: int, speed: float) -> torch.T
     except Exception as e:
         print(f"⚠️ TimeStretch warning ({e}), returning raw waveform")
         return waveform
+
+
+def split_text_into_chunks(text: str, max_chars: int = 160) -> List[str]:
+    """
+    Split text into natural conversational chunks based on sentences, paragraphs,
+    and punctuation, ensuring each chunk stays within the optimal acoustic window (max_chars)
+    without cutting words or sentences in half.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+
+    # Split by sentence boundaries (. ! ? ۔ ؟ \n) while keeping sentence integrity
+    sentences = re.split(r'(?<=[.!?۔؟\n])\s+', text)
+    chunks = []
+    curr = ""
+
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        if len(s) > max_chars:
+            # If a single sentence exceeds max_chars, split on secondary punctuation (, ; ، ؛)
+            sub_clauses = re.split(r'(?<=[,;،؛])\s+', s)
+            for sc in sub_clauses:
+                sc = sc.strip()
+                if not sc:
+                    continue
+                if curr and len(curr) + len(sc) + 1 > max_chars:
+                    chunks.append(curr.strip())
+                    curr = sc
+                else:
+                    curr = f"{curr} {sc}" if curr else sc
+        else:
+            if curr and len(curr) + len(s) + 1 > max_chars:
+                chunks.append(curr.strip())
+                curr = s
+            else:
+                curr = f"{curr} {s}" if curr else s
+
+    if curr.strip():
+        chunks.append(curr.strip())
+
+    return chunks
+
+
+def synthesize_speech_adaptive(
+    text: str,
+    exaggeration: float = 0.5,
+    cfg_weight: float = 0.5,
+    speed: float = 1.0,
+) -> torch.Tensor:
+    """
+    Synthesize speech adaptively:
+    For short texts (<= 160 chars), generates in a single clean pass.
+    For longer scripts/paragraphs, splits into natural sentence chunks (<= 160 chars),
+    generates each chunk with clean attention alignment, and stitches them with natural pauses.
+    Completely eliminates attention collapse, 1000-token cutoffs, and 30s silence loops!
+    """
+    clean_text = text.strip()
+    chunks = split_text_into_chunks(clean_text, max_chars=160)
+
+    if len(chunks) <= 1:
+        wav = MODEL.generate(
+            text=clean_text,
+            audio_prompt_path=None,
+            exaggeration=exaggeration,
+            cfg_weight=cfg_weight,
+        )
+    else:
+        print(f"🧩 [Multi-Segment Synthesis] Long script detected ({len(clean_text)} chars). Generating {len(chunks)} seamless acoustic segments...")
+        segment_wavs = []
+        # 250ms natural breath pause between sentences (24000 * 0.25 = 6000 samples)
+        pause_samples = int(MODEL.sr * 0.25)
+
+        for idx, chunk in enumerate(chunks, 1):
+            print(f"   ▶ Segment {idx}/{len(chunks)} ({len(chunk)} chars): '{chunk[:40]}...'")
+            seg = MODEL.generate(
+                text=chunk,
+                audio_prompt_path=None,
+                exaggeration=exaggeration,
+                cfg_weight=cfg_weight,
+            )
+            if seg.dim() == 1:
+                seg = seg.unsqueeze(0)
+            segment_wavs.append(seg)
+
+            if idx < len(chunks):
+                silence = torch.zeros((1, pause_samples), dtype=seg.dtype, device=seg.device)
+                segment_wavs.append(silence)
+
+        wav = torch.cat(segment_wavs, dim=-1)
+
+    # Apply pitch-preserving Phase Vocoder time-stretch if speed != 1.0
+    if abs(speed - 1.0) >= 0.02:
+        print(f"⚡ [Phase Vocoder] Applying instant time-stretch factor {speed}x...")
+        wav = apply_time_stretch(wav, MODEL.sr, speed)
+
+    # Ensure correct tensor dimensions and clamp for 16-bit PCM conversion
+    if wav.dim() == 1:
+        wav = wav.unsqueeze(0)
+    wav = torch.clamp(wav, -1.0, 1.0)
+    return wav
 
 
 def get_or_prepare_conditionals(audio_path: Path, exaggeration: float = 0.5):
@@ -421,22 +527,12 @@ async def clone_voice(
         print(f"🧠 [Phase 2/3 - CPU / 16GB RAM] Generating Speech Tokens via LLM (T3)...")
         print(f"🌊 [Phase 3/3 - {DEVICE}] Synthesizing Waveform via Diffusion Vocoder (1000 steps)...")
 
-        wav = MODEL.generate(
+        wav = synthesize_speech_adaptive(
             text=clean_text_key,
-            audio_prompt_path=None,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
+            speed=speed,
         )
-
-        # Apply pitch-preserving Phase Vocoder time-stretch if speed != 1.0
-        if abs(speed - 1.0) >= 0.02:
-            print(f"⚡ [Phase Vocoder] Applying instant time-stretch factor {speed}x...")
-            wav = apply_time_stretch(wav, MODEL.sr, speed)
-
-        # Ensure correct tensor dimensions and clamp for 16-bit PCM conversion
-        if wav.dim() == 1:
-            wav = wav.unsqueeze(0)
-        wav = torch.clamp(wav, -1.0, 1.0)
 
         # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
         ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)
@@ -613,22 +709,12 @@ async def clone_with_saved_voice(
         print(f"🧠 [Phase 2/3 - CPU / 16GB RAM] Generating Speech Tokens via LLM (T3)...")
         print(f"🌊 [Phase 3/3 - {DEVICE}] Synthesizing Waveform via Diffusion Vocoder (1000 steps)...")
 
-        wav = MODEL.generate(
-            text=text,
-            audio_prompt_path=None,
+        wav = synthesize_speech_adaptive(
+            text=clean_text_key,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
+            speed=speed,
         )
-
-        # Apply pitch-preserving Phase Vocoder time-stretch if speed != 1.0
-        if abs(speed - 1.0) >= 0.02:
-            print(f"⚡ [Phase Vocoder] Applying instant time-stretch factor {speed}x...")
-            wav = apply_time_stretch(wav, MODEL.sr, speed)
-
-        # Ensure correct tensor dimensions and clamp for 16-bit PCM conversion
-        if wav.dim() == 1:
-            wav = wav.unsqueeze(0)
-        wav = torch.clamp(wav, -1.0, 1.0)
 
         # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
         ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)

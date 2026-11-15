@@ -154,6 +154,80 @@ export function VoiceCloneStudio() {
     }
   };
 
+  // ─── LocalStorage Persistence for Settings ───────────────────────
+  const STORAGE_KEY = "sq_tts_voice_clone_settings_v1";
+
+  // Load saved settings on initial mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.text === "string" && parsed.text.trim()) {
+          setText(parsed.text);
+        }
+        if (typeof parsed.selectedSavedVoice === "string") {
+          setSelectedSavedVoice(parsed.selectedSavedVoice);
+          if (parsed.selectedSavedVoice) {
+            analyzeReferenceVoice(null, parsed.selectedSavedVoice);
+          }
+        }
+        if (typeof parsed.exaggeration === "number") {
+          setExaggeration(parsed.exaggeration);
+        }
+        if (typeof parsed.cfgWeight === "number") {
+          setCfgWeight(parsed.cfgWeight);
+        }
+        if (typeof parsed.speed === "number") {
+          setSpeed(parsed.speed);
+        }
+        if (typeof parsed.autoMatchPace === "boolean") {
+          setAutoMatchPace(parsed.autoMatchPace);
+        }
+        if (typeof parsed.autoCleanTags === "boolean") {
+          setAutoCleanTags(parsed.autoCleanTags);
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load saved clone settings from localStorage:", e);
+    }
+  }, []);
+
+  // Auto-save settings whenever any of them changes
+  useEffect(() => {
+    try {
+      const settings = {
+        text,
+        selectedSavedVoice,
+        exaggeration,
+        cfgWeight,
+        speed,
+        autoMatchPace,
+        autoCleanTags,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.warn("Could not save clone settings to localStorage:", e);
+    }
+  }, [text, selectedSavedVoice, exaggeration, cfgWeight, speed, autoMatchPace, autoCleanTags]);
+
+  // Reset settings to factory defaults
+  const handleResetSettings = () => {
+    setText("Hello! This is a realistic preview of my cloned voice, synthesized completely free and locally.");
+    setSelectedSavedVoice("");
+    setExaggeration(0.5);
+    setCfgWeight(0.5);
+    setSpeed(1.0);
+    setAutoMatchPace(true);
+    setAutoCleanTags(true);
+    setPaceAnalysis(null);
+    setAudioFile(null);
+    setAudioPreviewUrl(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  };
+
   // Handle file select
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -628,10 +702,27 @@ export function VoiceCloneStudio() {
 
             {/* Voice Tuning Parameters */}
             <div className="pt-3 border-t border-zinc-800 space-y-3.5">
-              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-purple-400" />
-                Acoustic Dynamics & Pacing
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-purple-400" />
+                  Acoustic Dynamics & Pacing
+                </span>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[10px] text-zinc-500 flex items-center gap-1 font-mono" title="Parameters auto-saved to browser storage">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    Auto-saved
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResetSettings}
+                    className="text-[10px] text-zinc-500 hover:text-purple-300 transition flex items-center gap-1 cursor-pointer"
+                    title="Reset all settings to default"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset
+                  </button>
+                </div>
+              </div>
 
               {/* Expressiveness Slider */}
               <div className="space-y-1">

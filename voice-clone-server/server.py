@@ -166,6 +166,39 @@ def apply_time_stretch(waveform: torch.Tensor, sr: int, speed: float) -> torch.T
         return waveform
 
 
+def is_audio_valid_and_not_silent(wav_tensor: torch.Tensor, sr: int = 24000) -> bool:
+    """
+    Validates synthesized waveform: checks if audio has healthy speech energy and is not dead silence.
+    Returns True if audio is healthy speech; False if silent or anomalous.
+    """
+    try:
+        if wav_tensor is None or wav_tensor.numel() == 0:
+            return False
+        # Flatten to 1D float
+        flat = wav_tensor.float().flatten()
+        # Overall RMS
+        overall_rms = torch.sqrt(torch.mean(flat ** 2)).item()
+        if overall_rms < 0.005:
+            return False
+
+        # Check windowed silence if duration >= 5 seconds
+        duration_sec = int(flat.numel() / sr)
+        if duration_sec >= 5:
+            silent_seconds = 0
+            for s in range(duration_sec):
+                chunk = flat[s * sr : (s + 1) * sr]
+                chunk_rms = torch.sqrt(torch.mean(chunk ** 2)).item()
+                if chunk_rms < 0.002:
+                    silent_seconds += 1
+            # If more than 55% of the audio is dead silence, flag as anomalous
+            if (silent_seconds / duration_sec) > 0.55:
+                return False
+
+        return True
+    except Exception:
+        return True
+
+
 def split_text_into_chunks(text: str, max_chars: int = 160) -> List[str]:
     """
     Split text into natural conversational chunks based on sentences, paragraphs,
@@ -545,12 +578,15 @@ async def clone_voice(
         # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
         ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)
 
-        # Save to Audio Cache for instant future re-runs
-        try:
-            shutil.copyfile(temp_output, cached_audio_file)
-            print(f"💾 [Audio Cache Saved] Next time this text is synthesized with this voice at {speed}x, it will load instantly (0.01s)!")
-        except Exception as ce:
-            print(f"⚠️ Audio cache write warning: {ce}")
+        # Save to Audio Cache for instant future re-runs if audio is healthy
+        if is_audio_valid_and_not_silent(wav, MODEL.sr):
+            try:
+                shutil.copyfile(temp_output, cached_audio_file)
+                print(f"💾 [Audio Cache Saved] Next time this text is synthesized with this voice at {speed}x, it will load instantly (0.01s)!")
+            except Exception as ce:
+                print(f"⚠️ Audio cache write warning: {ce}")
+        else:
+            print("⚠️ [Cache Skipped] Generated audio has low acoustic energy or excessive silence. Skipping disk cache.")
 
         elapsed_sec = round(time.time() - t_start, 1)
         print(f"✅ [Synthesis Complete] Finished in {elapsed_sec}s!")
@@ -655,6 +691,30 @@ async def delete_voice(
     return {"status": "deleted", "name": target_name}
 
 
+# ─── Audio Cache Management ─────────────────────────────────────────
+@app.post("/clear-cache")
+async def clear_audio_cache():
+    """
+    Flushes all cached WAV audio files from audio_cache.
+    Prevents stale, corrupt, or silent outputs from persisting.
+    """
+    try:
+        deleted_count = 0
+        freed_bytes = 0
+        for f in AUDIO_CACHE_DIR.glob("*.wav"):
+            try:
+                freed_bytes += f.stat().st_size
+                f.unlink(missing_ok=True)
+                deleted_count += 1
+            except Exception:
+                pass
+        freed_mb = round(freed_bytes / (1024 * 1024), 2)
+        print(f"🧹 [Cache Flushed] Deleted {deleted_count} cached audio files ({freed_mb} MB).")
+        return {"status": "ok", "deleted_count": deleted_count, "freed_mb": freed_mb}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear audio cache: {str(e)}")
+
+
 # ─── Clone with Saved Voice ────────────────────────────────────────
 @app.post("/clone-saved")
 async def clone_with_saved_voice(
@@ -727,11 +787,15 @@ async def clone_with_saved_voice(
         # Save to temp file as standard 16-bit PCM WAV (AudioFormat: 1) for 100% universal browser playback
         ta.save(str(temp_output), wav, MODEL.sr, encoding="PCM_S", bits_per_sample=16)
 
-        try:
-            shutil.copyfile(temp_output, cached_audio_file)
-            print(f"💾 [Audio Cache Saved] Next time this saved voice is synthesized with this text at {speed}x, it will load instantly (0.01s)!")
-        except Exception:
-            pass
+        # Save to Audio Cache for instant future re-runs if audio is healthy
+        if is_audio_valid_and_not_silent(wav, MODEL.sr):
+            try:
+                shutil.copyfile(temp_output, cached_audio_file)
+                print(f"💾 [Audio Cache Saved] Next time this saved voice is synthesized with this text at {speed}x, it will load instantly (0.01s)!")
+            except Exception as ce:
+                print(f"⚠️ Audio cache write warning: {ce}")
+        else:
+            print("⚠️ [Cache Skipped] Generated audio has low acoustic energy or excessive silence. Skipping disk cache.")
 
         elapsed_sec = round(time.time() - t_start, 1)
         print(f"✅ [Synthesis Complete] Finished in {elapsed_sec}s!")

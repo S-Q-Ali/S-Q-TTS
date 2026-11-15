@@ -74,6 +74,9 @@ export function VoiceCloneStudio() {
   const [deletingVoice, setDeletingVoice] = useState<string | null>(null);
   const [confirmDeleteVoice, setConfirmDeleteVoice] = useState<string | null>(null);
 
+  // Audio Cache Management State
+  const [isClearingCache, setIsClearingCache] = useState<boolean>(false);
+
   // Script tags analysis
   const scriptAnalysis = useMemo(() => {
     return parseScriptTags(text);
@@ -226,6 +229,26 @@ export function VoiceCloneStudio() {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
+  };
+
+  // Flush cached audio files on the backend
+  const handleClearCache = async () => {
+    try {
+      setIsClearingCache(true);
+      setError(null);
+      const res = await fetch("/api/clone/clear-cache", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg(`Cache cleared: Removed ${data.deleted_count} cached audio file(s) (${data.freed_mb} MB).`);
+        setTimeout(() => setSuccessMsg(null), 4000);
+      } else {
+        setError(data.error || "Failed to clear audio cache");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to clear audio cache");
+    } finally {
+      setIsClearingCache(false);
+    }
   };
 
   // Handle file select
@@ -720,6 +743,20 @@ export function VoiceCloneStudio() {
                   >
                     <RotateCcw className="w-3 h-3" />
                     Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearCache}
+                    disabled={isClearingCache}
+                    className="text-[10px] text-zinc-500 hover:text-amber-300 transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    title="Flush cached audio files from disk"
+                  >
+                    {isClearingCache ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                    ) : (
+                      <Trash2 className="w-3 h-3" />
+                    )}
+                    Clear Cache
                   </button>
                 </div>
               </div>

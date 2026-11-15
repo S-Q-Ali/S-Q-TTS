@@ -862,6 +862,106 @@ async def clone_with_saved_voice(
             temp_output.unlink(missing_ok=True)
 
 
+VC_MODEL = None
+
+def get_vc_model():
+    global VC_MODEL
+    if VC_MODEL is None:
+        from chatterbox.vc import ChatterboxVC
+        # Share S3Gen diffusion vocoder from MODEL to avoid allocating duplicate memory
+        VC_MODEL = ChatterboxVC(s3gen=MODEL.s3gen, device=DEVICE)
+    return VC_MODEL
+
+
+# ─── Voice Conversion Endpoint (Option A: Microsoft TTS -> Cloned Voice) ────
+@app.post("/convert-voice")
+async def convert_voice(
+    source_audio: UploadFile = File(..., description="Source speech audio (e.g. from Microsoft Edge TTS)"),
+    voice_name: Optional[str] = Form(None, description="Name of previously saved voice profile"),
+    target_wav: Optional[UploadFile] = File(None, description="Optional raw reference voice audio"),
+    speed: float = Form(1.0, description="Speed factor multiplier (0.75 - 1.35)"),
+):
+    """
+    Converts source speech audio (e.g. high-fidelity Microsoft Neural TTS)
+    into the timbre and acoustic identity of the target cloned voice.
+    """
+    if not MODEL_READY_EVENT.is_set():
+        try:
+            await asyncio.wait_for(MODEL_READY_EVENT.wait(), timeout=180.0)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=503, detail="AI Neural Engine is still loading weights into RAM.")
+
+    speed = max(0.75, min(1.35, float(speed)))
+    file_id = str(uuid.uuid4())[:8]
+    temp_source = UPLOAD_DIR / f"vc_src_{file_id}.wav"
+    temp_target = None
+    temp_output = OUTPUT_DIR / f"vc_out_{file_id}.wav"
+
+    try:
+        # Save source speech audio
+        with open(temp_source, "wb") as f:
+            f.write(await source_audio.read())
+
+        target_path = None
+        if voice_name and voice_name.strip():
+            for f in VOICES_DIR.iterdir():
+                if f.stem == voice_name.strip():
+                    target_path = f
+                    break
+            if not target_path:
+                raise HTTPException(status_code=404, detail=f"Voice profile '{voice_name}' not found")
+        elif target_wav:
+            ext = Path(target_wav.filename or "audio.wav").suffix or ".wav"
+            temp_target = UPLOAD_DIR / f"vc_tgt_{file_id}{ext}"
+            with open(temp_target, "wb") as f:
+                f.write(await target_wav.read())
+            target_path = temp_target
+        else:
+            raise HTTPException(status_code=400, detail="Either voice_name or target_wav must be provided.")
+
+        t_start = time.time()
+        print(f"🔄 [Voice Conversion] Converting Microsoft audio to cloned voice: '{target_path.stem}'...")
+
+        vc = get_vc_model()
+        vc.set_target_voice(str(target_path))
+        wav = vc.generate(str(temp_source))
+
+        if abs(speed - 1.0) >= 0.02:
+            wav = apply_time_stretch(wav, vc.sr, speed)
+
+        if wav.dim() == 1:
+            wav = wav.unsqueeze(0)
+        wav = torch.clamp(wav, -1.0, 1.0)
+
+        ta.save(str(temp_output), wav, vc.sr, encoding="PCM_S", bits_per_sample=16)
+        elapsed = round(time.time() - t_start, 1)
+        print(f"✅ [Conversion Complete] Finished in {elapsed}s!")
+
+        with open(temp_output, "rb") as f:
+            audio_bytes = f.read()
+
+        return StreamingResponse(
+            io.BytesIO(audio_bytes),
+            media_type="audio/wav",
+            headers={
+                "Content-Disposition": f'attachment; filename="converted_{file_id}.wav"',
+                "Content-Length": str(len(audio_bytes)),
+                "X-Conversion-Time": str(elapsed),
+                "X-Speed-Factor": str(speed),
+            },
+        )
+    except Exception as e:
+        print(f"❌ Voice Conversion error: {e}")
+        raise HTTPException(status_code=500, detail=f"Voice conversion failed: {str(e)}")
+    finally:
+        if temp_source.exists():
+            temp_source.unlink(missing_ok=True)
+        if temp_target and temp_target.exists():
+            temp_target.unlink(missing_ok=True)
+        if temp_output.exists():
+            temp_output.unlink(missing_ok=True)
+
+
 # ─── Entry Point ────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn

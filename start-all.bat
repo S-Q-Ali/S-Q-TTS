@@ -34,14 +34,15 @@ if not exist "%~dp0node_modules" (
     )
 )
 
-:: 3. Check if Python AI Engine is already active on port 8001
-echo  [1/2] Checking AI Engine & Port Status...
-set "AI_ALREADY_LOADED=0"
-powershell -NoProfile -Command "$conn = Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue; if ($conn) { exit 0 } else { exit 1 }" >nul 2>&1
-if not errorlevel 1 (
-    set "AI_ALREADY_LOADED=1"
-    echo   [FAST RE-CONNECT] AI Engine is ALREADY active in RAM on port 8001! (Instant 0.0s startup!)
+:: 3. Check if Python AI Engine is already responding on port 8001
+echo  [1/2] Verifying server ports...
+set "AI_ALREADY_RUNNING=0"
+powershell -NoProfile -Command "try { $res = Invoke-WebRequest -Uri 'http://127.0.0.1:8001/health' -TimeoutSec 1 -UseBasicParsing; if ($res.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+if "%ERRORLEVEL%"=="0" (
+    set "AI_ALREADY_RUNNING=1"
+    echo   [FAST CONNECT] AI Engine is ALREADY active in RAM on port 8001! (Instant 0.0s startup)
 ) else (
+    echo   Releasing stale port 8001 if occupied...
     powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 )
 
@@ -51,8 +52,8 @@ powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3000 -ErrorActio
 :: 4. Launch browser timer in background (auto-opens http://localhost:3000 in 5 seconds)
 start /b "" powershell -NoProfile -Command "Start-Sleep -Seconds 5; Start-Process 'http://localhost:3000'" >nul 2>&1
 
-:: 5. Run Studio Pipeline
-if "%AI_ALREADY_LOADED%"=="1" (
+:: 5. Launch Services
+if "%AI_ALREADY_RUNNING%"=="1" (
     echo  [2/2] Connecting Studio to running AI Engine on Port 8001...
     echo.
     echo  =============================================================
@@ -60,7 +61,7 @@ if "%AI_ALREADY_LOADED%"=="1" (
     echo   - Backend Server: http://localhost:8001 [ACTIVE IN RAM]
     echo   - API Swagger:    http://localhost:8001/docs
     echo.
-    echo   To completely shut down AI Engine & free RAM, run stop-all.bat
+    echo   To stop all servers and free RAM, run stop-all.bat
     echo  =============================================================
     echo.
     cd /d "%~dp0"
@@ -70,7 +71,7 @@ if "%AI_ALREADY_LOADED%"=="1" (
     echo.
     echo  =============================================================
     echo   - Frontend App:   http://localhost:3000 (Opening in browser...)
-    echo   - Backend Server: http://localhost:8001 [Fast Boot & Background Warmup]
+    echo   - Backend Server: http://localhost:8001 [Fast Boot and Warmup]
     echo   - API Swagger:    http://localhost:8001/docs
     echo.
     echo   Press CTRL+C anytime in this window to stop BOTH servers.

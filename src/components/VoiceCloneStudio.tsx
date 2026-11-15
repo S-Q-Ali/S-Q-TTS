@@ -43,6 +43,17 @@ interface VoicePaceAnalysis {
   recommended_speed: number;
 }
 
+const MS_BASE_VOICES = [
+  { id: "ur-PK-AsadNeural", name: "Asad (Urdu - Pakistan, Natural Male)", lang: "Urdu" },
+  { id: "ur-PK-UzmaNeural", name: "Uzma (Urdu - Pakistan, Expressive Female)", lang: "Urdu" },
+  { id: "en-US-JennyNeural", name: "Jenny (English - US, Natural Female)", lang: "English" },
+  { id: "en-US-GuyNeural", name: "Guy (English - US, Deep Male)", lang: "English" },
+  { id: "en-GB-SoniaNeural", name: "Sonia (English - UK, Clear Female)", lang: "English" },
+  { id: "en-IN-NeerjaNeural", name: "Neerja (English - Indian Accent Female)", lang: "English" },
+  { id: "hi-IN-MadhurNeural", name: "Madhur (Hindi / Urdu - India Male)", lang: "Hindi/Urdu" },
+  { id: "hi-IN-SwaraNeural", name: "Swara (Hindi / Urdu - India Female)", lang: "Hindi/Urdu" },
+];
+
 export function VoiceCloneStudio() {
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [device, setDevice] = useState<string>("cpu");
@@ -51,6 +62,10 @@ export function VoiceCloneStudio() {
   const [modelLoaded, setModelLoaded] = useState<boolean>(false);
   const [modelStep, setModelStep] = useState<string>("");
   const [modelProgress, setModelProgress] = useState<number>(0);
+
+  // Synthesis Mode: "direct" (Chatterbox T3 LLM) vs "hybrid" (Option A: Microsoft TTS -> Voice Conversion)
+  const [synthesisMode, setSynthesisMode] = useState<"direct" | "hybrid">("direct");
+  const [msVoice, setMsVoice] = useState<string>("ur-PK-AsadNeural");
 
   // Form State
   const [text, setText] = useState<string>(
@@ -211,6 +226,12 @@ export function VoiceCloneStudio() {
         if (typeof parsed.autoCleanTags === "boolean") {
           setAutoCleanTags(parsed.autoCleanTags);
         }
+        if (parsed.synthesisMode === "direct" || parsed.synthesisMode === "hybrid") {
+          setSynthesisMode(parsed.synthesisMode);
+        }
+        if (typeof parsed.msVoice === "string" && parsed.msVoice.trim()) {
+          setMsVoice(parsed.msVoice);
+        }
       }
     } catch (e) {
       console.warn("Could not load saved clone settings from localStorage:", e);
@@ -228,12 +249,14 @@ export function VoiceCloneStudio() {
         speed,
         autoMatchPace,
         autoCleanTags,
+        synthesisMode,
+        msVoice,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
     } catch (e) {
       console.warn("Could not save clone settings to localStorage:", e);
     }
-  }, [text, selectedSavedVoice, exaggeration, cfgWeight, speed, autoMatchPace, autoCleanTags]);
+  }, [text, selectedSavedVoice, exaggeration, cfgWeight, speed, autoMatchPace, autoCleanTags, synthesisMode, msVoice]);
 
   // Reset settings to factory defaults
   const handleResetSettings = () => {
@@ -428,18 +451,32 @@ export function VoiceCloneStudio() {
 
       const formData = new FormData();
       formData.append("text", text.trim());
-      formData.append("exaggeration", parseFloat(exaggeration.toFixed(2)).toString());
-      formData.append("cfg_weight", parseFloat(cfgWeight.toFixed(2)).toString());
       formData.append("speed", parseFloat(speed.toFixed(2)).toString());
+      formData.append("autoClean", autoCleanTags ? "true" : "false");
       formData.append("auto_clean", autoCleanTags ? "true" : "false");
 
-      if (audioFile) {
-        formData.append("speaker_wav", audioFile);
-      } else if (selectedSavedVoice) {
-        formData.append("voice_name", selectedSavedVoice);
+      let endpoint = "/api/clone";
+
+      if (synthesisMode === "hybrid") {
+        endpoint = "/api/clone/hybrid";
+        formData.append("msVoice", msVoice);
+        if (audioFile) {
+          formData.append("speaker_wav", audioFile);
+        } else if (selectedSavedVoice) {
+          formData.append("voice_name", selectedSavedVoice);
+        }
+      } else {
+        // Direct Mode (Chatterbox T3 LLM)
+        formData.append("exaggeration", parseFloat(exaggeration.toFixed(2)).toString());
+        formData.append("cfg_weight", parseFloat(cfgWeight.toFixed(2)).toString());
+        if (audioFile) {
+          formData.append("speaker_wav", audioFile);
+        } else if (selectedSavedVoice) {
+          formData.append("voice_name", selectedSavedVoice);
+        }
       }
 
-      const res = await fetch("/api/clone", {
+      const res = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
@@ -546,15 +583,97 @@ export function VoiceCloneStudio() {
         </div>
       </div>
 
+      {/* Synthesis Mode Switcher (Option A vs Direct Cloner) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setSynthesisMode("direct")}
+          className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex items-start gap-3 ${
+            synthesisMode === "direct"
+              ? "bg-purple-950/40 border-purple-500/60 shadow-lg shadow-purple-900/20"
+              : "bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 opacity-70 hover:opacity-100"
+          }`}
+        >
+          <div className={`p-2 rounded-lg ${synthesisMode === "direct" ? "bg-purple-600/30 text-purple-300" : "bg-zinc-800 text-zinc-400"}`}>
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-zinc-100 flex items-center gap-2">
+              Direct Neural Cloner (Chatterbox T3)
+              {synthesisMode === "direct" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">Active</span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+              Standard local cloner with emotional expressiveness sliders. Best for English scripts.
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSynthesisMode("hybrid")}
+          className={`p-3.5 rounded-xl border text-left transition cursor-pointer flex items-start gap-3 ${
+            synthesisMode === "hybrid"
+              ? "bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-900/20"
+              : "bg-zinc-900/40 border-zinc-800 hover:border-zinc-700 opacity-70 hover:opacity-100"
+          }`}
+        >
+          <div className={`p-2 rounded-lg ${synthesisMode === "hybrid" ? "bg-emerald-600/30 text-emerald-300" : "bg-zinc-800 text-zinc-400"}`}>
+            <Zap className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-zinc-100 flex items-center gap-2">
+              Microsoft Neural Hybrid (Option A)
+              {synthesisMode === "hybrid" && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">Active</span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+              Microsoft Neural pronunciation + Your cloned voice. 3x faster, perfect for Urdu, poems & long scripts!
+            </p>
+          </div>
+        </button>
+      </div>
+
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Voice Sample Input (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
+          {/* Microsoft Base Voice Selector (Option A Hybrid Mode) */}
+          {synthesisMode === "hybrid" && (
+            <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-700/50 space-y-2.5 animate-in fade-in backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-emerald-300 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  Microsoft Base Pronunciation Voice
+                </label>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-medium">
+                  Native Neural Flow
+                </span>
+              </div>
+              <select
+                value={msVoice}
+                onChange={(e) => setMsVoice(e.target.value)}
+                className="w-full bg-zinc-900 border border-emerald-600/60 rounded-xl px-3.5 py-2.5 text-xs text-zinc-100 focus:outline-none focus:border-emerald-400 cursor-pointer font-medium"
+              >
+                {MS_BASE_VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    [{v.lang}] {v.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-zinc-400 leading-tight">
+                Microsoft Neural TTS speaks the text with authentic pronunciation & rhythm, then morphs seamlessly into your chosen voice below.
+              </p>
+            </div>
+          )}
+
           <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <label className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
                 <AudioWaveform className="w-4 h-4 text-purple-400" />
-                1. Voice Reference Sample
+                {synthesisMode === "hybrid" ? "Target Cloned Voice (Identity)" : "1. Voice Reference Sample"}
               </label>
               <span className="text-xs text-purple-400 font-medium">6 - 15 sec sample</span>
             </div>
@@ -1205,12 +1324,18 @@ export function VoiceCloneStudio() {
             <button
               onClick={handleCloneAndGenerate}
               disabled={isSynthesizing || serverOnline === false || !modelLoaded}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-purple-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 transition cursor-pointer"
+              className={`w-full py-3.5 px-4 rounded-xl text-white font-semibold text-sm shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 transition cursor-pointer ${
+                synthesisMode === "hybrid"
+                  ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-600/20"
+                  : "bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/20"
+              }`}
             >
               {isSynthesizing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Synthesizing Cloned Voice ({formatTime(synthesisElapsed)})...
+                  {synthesisMode === "hybrid"
+                    ? `Converting via Microsoft Neural Hybrid (${formatTime(synthesisElapsed)})...`
+                    : `Synthesizing Cloned Voice (${formatTime(synthesisElapsed)})...`}
                 </>
               ) : !modelLoaded && serverOnline ? (
                 <>
@@ -1219,8 +1344,14 @@ export function VoiceCloneStudio() {
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  Clone Voice & Generate Speech
+                  {synthesisMode === "hybrid" ? (
+                    <Zap className="w-4 h-4 text-emerald-300" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {synthesisMode === "hybrid"
+                    ? "Generate via Microsoft Neural Hybrid"
+                    : "Clone Voice & Generate Speech"}
                 </>
               )}
             </button>

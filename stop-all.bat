@@ -1,7 +1,7 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title S-Q-TTS Studio - Shutdown & RAM Release
+title S-Q-TTS Studio - Shutdown and RAM Release
 
 echo.
 echo  =============================================================

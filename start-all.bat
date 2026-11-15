@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
@@ -38,10 +38,11 @@ if not exist "%~dp0node_modules" (
 echo  [1/2] Verifying server ports...
 set "AI_ALREADY_RUNNING=0"
 powershell -NoProfile -Command "try { $res = Invoke-WebRequest -Uri 'http://127.0.0.1:8001/health' -TimeoutSec 1 -UseBasicParsing; if ($res.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
-if "%ERRORLEVEL%"=="0" (
+if not errorlevel 1 (
     set "AI_ALREADY_RUNNING=1"
     echo   [FAST CONNECT] AI Engine is ALREADY active in RAM on port 8001! (Instant 0.0s startup)
 ) else (
+    set "AI_ALREADY_RUNNING=0"
     echo   Releasing stale port 8001 if occupied...
     powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 )
@@ -53,7 +54,7 @@ powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3000 -ErrorActio
 start /b "" powershell -NoProfile -Command "Start-Sleep -Seconds 5; Start-Process 'http://localhost:3000'" >nul 2>&1
 
 :: 5. Launch Services
-if "%AI_ALREADY_RUNNING%"=="1" (
+if "!AI_ALREADY_RUNNING!"=="1" (
     echo  [2/2] Connecting Studio to running AI Engine on Port 8001...
     echo.
     echo  =============================================================

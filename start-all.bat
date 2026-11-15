@@ -1,15 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
-title S-Q-TTS Studio - All-in-One Launcher
+title S-Q-TTS Studio - Unified Engine
 
 echo.
 echo  ╔═══════════════════════════════════════════════════════════════╗
-echo  ║               S-Q-TTS STUDIO - MASTER LAUNCHER                ║
+echo  ║               S-Q-TTS STUDIO - UNIFIED RUNNER                 ║
 echo  ║       Frontend (Next.js 3000) + Backend (FastAPI 8001)        ║
+echo  ║                [Single Terminal Dashboard]                    ║
 echo  ╚═══════════════════════════════════════════════════════════════╝
 echo.
 
-:: 1. Validate Voice Server Environment
+:: 1. Validate Python Environment
 if not exist "%~dp0voice-clone-server\venv\Scripts\python.exe" (
     echo  [ERROR] Python virtual environment missing!
     echo  Please run voice-clone-server\setup.bat first to install AI dependencies.
@@ -20,8 +21,7 @@ if not exist "%~dp0voice-clone-server\venv\Scripts\python.exe" (
 
 :: 2. Validate Node Dependencies
 if not exist "%~dp0node_modules" (
-    echo  [ERROR] Node dependencies missing!
-    echo  Running 'npm install' now...
+    echo  [ERROR] Node dependencies missing! Running 'npm install'...
     cd /d "%~dp0"
     call npm install
     if errorlevel 1 (
@@ -31,41 +31,24 @@ if not exist "%~dp0node_modules" (
     )
 )
 
-:: 3. Kill any stale orphaned processes on port 8001 or 3000
-echo  [1/4] Checking ports 8001 and 3000 for previous instances...
+:: 3. Clear previous port conflicts
+echo  [1/2] Releasing ports 8001 and 3000 if occupied...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8001,3000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
-:: 4. Start Python Voice Clone Server
-echo  [2/4] Starting FastAPI Voice Clone Server on http://localhost:8001 ...
-start "S-Q-TTS Backend [FastAPI 8001]" cmd /k "cd /d %~dp0voice-clone-server && title S-Q-TTS Backend [FastAPI 8001] && venv\Scripts\activate && python server.py"
+:: 4. Launch browser timer in background (auto-opens http://localhost:3000 in 5 seconds)
+start /b "" powershell -NoProfile -Command "Start-Sleep -Seconds 5; Start-Process 'http://localhost:3000'" >nul 2>&1
 
-:: 5. Start Next.js Frontend Server
-echo  [3/4] Starting Next.js Web Studio on http://localhost:3000 ...
-start "S-Q-TTS Frontend [Next.js 3000]" cmd /k "cd /d %~dp0 && title S-Q-TTS Frontend [Next.js 3000] && npm run dev"
-
-:: 6. Health-check & Launch Browser
-echo  [4/4] Initializing AI models and waiting for servers to be ready...
-echo        (Loading neural models in background: ~10 seconds)
-echo.
-
-timeout /t 5 /nobreak >nul
-
-:: Automatically open browser
-echo  Launching Studio in your browser...
-start "" "http://localhost:3000"
-
+:: 5. Run Unified Pipeline (Single Window with Magenta/Cyan prefixes)
+echo  [2/2] Launching AI Backend and Next.js Studio together...
 echo.
 echo  =============================================================
-echo   ✅ S-Q-TTS Studio is Running!
-echo  =============================================================
-echo   • Frontend App:   http://localhost:3000
+echo   • Frontend App:   http://localhost:3000 (Opening in browser...)
 echo   • Backend Server: http://localhost:8001
 echo   • API Swagger:    http://localhost:8001/docs
 echo.
-echo   To shut down both servers anytime, run 'stop-all.bat'
-echo   or close their respective command prompt windows.
+echo   Press CTRL+C anytime in this window to stop BOTH servers.
 echo  =============================================================
 echo.
-echo  This window can now be safely closed, or press any key to exit launcher.
-pause >nul
-exit /b 0
+
+cd /d "%~dp0"
+call npm run dev:all

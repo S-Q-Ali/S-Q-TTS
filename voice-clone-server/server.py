@@ -17,6 +17,7 @@ import time
 import uuid
 import shutil
 import hashlib
+import asyncio
 
 # Force UTF-8 on Windows consoles to prevent cp1252/charmap UnicodeEncodeError
 if hasattr(sys.stdout, "reconfigure"):
@@ -54,6 +55,18 @@ AUDIO_CACHE_DIR = Path(__file__).parent / "audio_cache"  # Pre-generated cloned 
 
 # In-memory RAM cache for active session voice conditionals: { hash: Conditionals }
 ACTIVE_COND_CACHE = {}
+
+# Background Model Pre-warming State Machine
+MODEL_READY_EVENT = asyncio.Event()
+MODEL_STATUS = {
+    "ready": False,
+    "status": "initializing",
+    "step": "Starting AI server...",
+    "progress": 0,
+    "device": "cpu",
+    "load_time_sec": None,
+    "error": None,
+}
 
 
 def compute_file_hash(fpath: Path) -> str:
@@ -352,83 +365,90 @@ def get_or_prepare_conditionals(audio_path: Path, exaggeration: float = 0.5):
         print(f"⚠️ Could not save embedding cache: {e}")
 
 
-# ─── Lifespan (model loading) ──────────────────────────────────────
+# ─── Lifespan & Background Model Warmup ────────────────────────────
+async def load_model_background():
+    """
+    Non-blocking background model initialization.
+    Loads Chatterbox directly from local cached snapshots, bypassing network checks.
+    Signals MODEL_READY_EVENT when fully warmed up.
+    """
+    global MODEL, DEVICE, MODEL_STATUS
+    t0 = time.time()
+    try:
+        MODEL_STATUS["status"] = "loading"
+        MODEL_STATUS["step"] = "Scanning local neural weights..."
+        MODEL_STATUS["progress"] = 20
+
+        from huggingface_hub import try_to_load_from_cache
+        from chatterbox.tts import REPO_ID, ChatterboxTTS
+
+        cached_file = try_to_load_from_cache(repo_id=REPO_ID, filename="ve.safetensors")
+        loop = asyncio.get_running_loop()
+
+        def _do_load():
+            # If snapshot is cached locally, bypass HuggingFace online network round-trips
+            if cached_file:
+                os.environ["HF_HUB_OFFLINE"] = "1"
+                local_dir = Path(cached_file).parent
+                print(f"⚡ [Fast Boot] Loading Chatterbox TTS directly from local snapshot: {local_dir}")
+                return ChatterboxTTS.from_local(local_dir, device="cpu")
+            else:
+                print("⏳ [First-time Setup] Local cache not found. Fetching from Hugging Face...")
+                return ChatterboxTTS.from_pretrained(device="cpu")
+
+        MODEL_STATUS["step"] = "Loading neural weights into RAM (safetensors)..."
+        MODEL_STATUS["progress"] = 40
+        MODEL = await loop.run_in_executor(None, _do_load)
+
+        DEVICE = "cpu"
+        elapsed = round(time.time() - t0, 1)
+        MODEL_STATUS["ready"] = True
+        MODEL_STATUS["status"] = "ready"
+        MODEL_STATUS["step"] = f"Model ready ({elapsed}s load)"
+        MODEL_STATUS["progress"] = 100
+        MODEL_STATUS["load_time_sec"] = elapsed
+        MODEL_READY_EVENT.set()
+        print(f"✅ Chatterbox TTS model loaded and ready in {elapsed}s!")
+    except Exception as e:
+        MODEL_STATUS["error"] = str(e)
+        MODEL_STATUS["status"] = "error"
+        MODEL_STATUS["step"] = f"Loading error: {e}"
+        print(f"❌ Background model loading error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load Chatterbox model once at startup."""
-    global MODEL, DEVICE
+    """
+    FastAPI Lifespan: Launches server in under 0.5s and delegates
+    heavy PyTorch tensor loading to background thread.
+    """
+    global DEVICE
 
-    # Enable expandable segments to combat fragmentation on low VRAM GPUs
+    # Configure multi-threading for PyTorch CPU operations
+    num_threads = min(os.cpu_count() or 4, 8)
+    torch.set_num_threads(num_threads)
+    os.environ["OMP_NUM_THREADS"] = str(num_threads)
+    os.environ["MKL_NUM_THREADS"] = str(num_threads)
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
-    # Detect device and attempt smart CPU/GPU auto-offload
-    if torch.cuda.is_available():
-        DEVICE = "cuda"
-        gpu_name = torch.cuda.get_device_name(0)
-        gpu_vram = round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 1)
-        print(f"Detected GPU: {gpu_name} ({gpu_vram} GB VRAM)")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        DEVICE = "mps"
-    else:
-        DEVICE = "cpu"
+    DEVICE = "cpu"
 
     print("============================================")
-    print("  S-Q-TTS Voice Clone Server")
-    print(f"  Target Device: {DEVICE}")
+    print("  S-Q-TTS Voice Clone Server (Fast Boot)")
+    print(f"  Target Device: {DEVICE} ({num_threads} CPU threads)")
     print("============================================")
-    print("Loading Chatterbox TTS model...")
 
-    from chatterbox.tts import ChatterboxTTS
-
-    # Try smart loading:
-    # 1. Full GPU (Fastest)
-    # 2. Pipeline Split: t3 (Text-to-Token LLM) on CPU + s3gen (Diffusion Waveform Vocoder) on GPU
-    # 3. Full CPU + 16GB RAM (Safe Fallback)
-    try:
-        if DEVICE == "cuda":
-            print("⚡ Step 1: Testing Full GPU loading (CUDA)...")
-            MODEL = ChatterboxTTS.from_pretrained(device="cuda")
-            print("🚀 Success: Model running 100% on GPU!")
-        else:
-            MODEL = ChatterboxTTS.from_pretrained(device="cpu")
-            print("✅ Success: Model running on CPU mode.")
-    except RuntimeError as cuda_err:
-        if "out of memory" in str(cuda_err).lower() or "cuda" in str(cuda_err).lower():
-            print("⚠️ 2GB VRAM was too tight for full model. Attempting TRUE HYBRID (CPU + GPU Pipeline)...")
-            torch.cuda.empty_cache()
-            try:
-                # Load on CPU first
-                MODEL = ChatterboxTTS.from_pretrained(device="cpu")
-                
-                # Split Pipeline: Offload s3gen (vocoder/audio diffusion) to GPU MX250
-                # Keep t3 (heavy LLM text transformer) in 16GB CPU RAM
-                if hasattr(MODEL, "s3gen"):
-                    print("⚡ Moving s3gen (Diffusion Vocoder) to NVIDIA MX250 GPU...")
-                    MODEL.s3gen = MODEL.s3gen.to("cuda")
-                    DEVICE = "cuda+cpu (hybrid)"
-                    print("🚀 TRUE HYBRID ACTIVATED: CPU handles Text Tokens + GPU synthesizes Audio Waveform simultaneously!")
-                else:
-                    DEVICE = "cpu"
-                    print("✅ Running in CPU mode with 16GB RAM.")
-            except Exception as hybrid_err:
-                print(f"⚠️ Hybrid split exception ({hybrid_err}). Reverting safely to pure CPU...")
-                torch.cuda.empty_cache()
-                DEVICE = "cpu"
-                MODEL = ChatterboxTTS.from_pretrained(device="cpu")
-                print("✅ Running stable on CPU mode.")
-        else:
-            raise cuda_err
-
-    print("✅ Model loaded successfully!")
-
-    # Ensure directories exist
+    # Ensure directories exist immediately
     UPLOAD_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
     VOICES_DIR.mkdir(exist_ok=True)
     EMBED_CACHE_DIR.mkdir(exist_ok=True)
     AUDIO_CACHE_DIR.mkdir(exist_ok=True)
 
-    yield  # App runs
+    # Launch background pre-warming task
+    asyncio.create_task(load_model_background())
+
+    yield  # App runs immediately on port 8001
 
     # Cleanup on shutdown
     print("Shutting down... cleaning temp files.")
@@ -457,10 +477,25 @@ app.add_middleware(
 # ─── Health Check ───────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    voices = []
+    if VOICES_DIR.exists():
+        for f in VOICES_DIR.iterdir():
+            if f.suffix.lower() in [".wav", ".mp3", ".flac", ".ogg", ".m4a"]:
+                voices.append({
+                    "name": f.stem,
+                    "filename": f.name,
+                    "size_kb": round(f.stat().st_size / 1024, 1),
+                })
     return {
-        "status": "ok",
-        "model_loaded": MODEL is not None,
-        "device": DEVICE,
+        "status": "ok" if MODEL_STATUS["ready"] else "warming_up",
+        "online": True,
+        "model_loaded": MODEL_STATUS["ready"],
+        "model_status": MODEL_STATUS["status"],
+        "step": MODEL_STATUS["step"],
+        "progress": MODEL_STATUS["progress"],
+        "device": DEVICE or "cpu",
+        "load_time_sec": MODEL_STATUS["load_time_sec"],
+        "voices": voices,
     }
 
 
@@ -512,8 +547,12 @@ async def clone_voice(
     Zero-shot voice cloning: takes a reference audio sample and generates
     speech in that voice saying the provided text.
     """
-    if MODEL is None:
-        raise HTTPException(status_code=503, detail="Model not loaded yet")
+    if not MODEL_READY_EVENT.is_set():
+        print("⏳ Synthesis request arrived while model is warming up. Waiting for initialization...")
+        try:
+            await asyncio.wait_for(MODEL_READY_EVENT.wait(), timeout=180.0)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=503, detail="AI Neural Engine is still loading weights into RAM. Please try again in 10 seconds.")
 
     if not text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
@@ -725,8 +764,12 @@ async def clone_with_saved_voice(
     speed: float = Form(1.0, description="Speech tempo / speed multiplier (0.75 - 1.35)"),
 ):
     """Generate speech using a previously saved voice profile."""
-    if MODEL is None:
-        raise HTTPException(status_code=503, detail="Model not loaded yet")
+    if not MODEL_READY_EVENT.is_set():
+        print("⏳ Synthesis request arrived while model is warming up. Waiting for initialization...")
+        try:
+            await asyncio.wait_for(MODEL_READY_EVENT.wait(), timeout=180.0)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=503, detail="AI Neural Engine is still loading weights into RAM. Please try again in 10 seconds.")
 
     # Clamp speed within safe natural audio boundary
     speed = max(0.75, min(1.35, float(speed)))

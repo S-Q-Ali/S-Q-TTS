@@ -49,9 +49,12 @@ export async function GET() {
 
     return NextResponse.json({
       online: true,
-      status: "ready",
+      status: healthData.model_loaded ? "ready" : "warming_up",
       device: healthData.device,
-      modelLoaded: healthData.model_loaded,
+      modelLoaded: !!healthData.model_loaded,
+      step: healthData.step || (healthData.model_loaded ? "Model ready" : "Loading weights..."),
+      progress: typeof healthData.progress === "number" ? healthData.progress : (healthData.model_loaded ? 100 : 30),
+      loadTimeSec: healthData.load_time_sec,
       voices,
     });
   } catch (err: any) {

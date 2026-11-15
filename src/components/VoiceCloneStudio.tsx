@@ -48,6 +48,9 @@ export function VoiceCloneStudio() {
   const [device, setDevice] = useState<string>("cpu");
   const [savedVoices, setSavedVoices] = useState<Array<{ name: string; filename: string; size_kb: number }>>([]);
   const [checkingServer, setCheckingServer] = useState<boolean>(true);
+  const [modelLoaded, setModelLoaded] = useState<boolean>(false);
+  const [modelStep, setModelStep] = useState<string>("");
+  const [modelProgress, setModelProgress] = useState<number>(0);
 
   // Form State
   const [text, setText] = useState<string>(
@@ -107,12 +110,17 @@ export function VoiceCloneStudio() {
         setServerOnline(true);
         setDevice(data.device || "cpu");
         setSavedVoices(data.voices || []);
+        setModelLoaded(!!data.modelLoaded);
+        setModelStep(data.step || "");
+        setModelProgress(data.progress || 0);
         setError(null);
       } else {
         setServerOnline(false);
+        setModelLoaded(false);
       }
     } catch {
       setServerOnline(false);
+      setModelLoaded(false);
     } finally {
       setCheckingServer(false);
     }
@@ -121,6 +129,19 @@ export function VoiceCloneStudio() {
   useEffect(() => {
     checkHealth();
   }, []);
+
+  // Auto-poll health every 3 seconds while server is online but model is still warming up
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (serverOnline && !modelLoaded) {
+      interval = setInterval(() => {
+        checkHealth();
+      }, 3000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [serverOnline, modelLoaded]);
 
   // Rapid Reference Voice Pace Analyzer
   const analyzeReferenceVoice = async (file?: File | null, savedName?: string) => {
@@ -463,29 +484,47 @@ export function VoiceCloneStudio() {
       {/* Server Status Header Banner */}
       <div
         className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm transition-colors ${
-          serverOnline
-            ? "bg-emerald-950/30 border-emerald-800/40 text-emerald-300"
-            : "bg-amber-950/30 border-amber-800/40 text-amber-300"
+          !serverOnline
+            ? "bg-amber-950/30 border-amber-800/40 text-amber-300"
+            : !modelLoaded
+            ? "bg-indigo-950/30 border-indigo-800/40 text-indigo-300"
+            : "bg-emerald-950/30 border-emerald-800/40 text-emerald-300"
         }`}
       >
         <div className="flex items-center gap-3">
           <div
             className={`w-3 h-3 rounded-full ${
-              serverOnline ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+              !serverOnline
+                ? "bg-amber-400"
+                : !modelLoaded
+                ? "bg-indigo-400 animate-pulse"
+                : "bg-emerald-400 animate-pulse"
             }`}
           />
           <div>
             <div className="font-semibold flex items-center gap-2">
               <Server className="w-4 h-4" />
-              {serverOnline
-                ? `Local Voice Engine Active (Device: ${device.toUpperCase()})`
-                : "Voice Clone Server (Port 8001) Disconnected"}
+              {!serverOnline
+                ? "Voice Clone Server (Port 8001) Disconnected"
+                : !modelLoaded
+                ? "Local AI Neural Engine Warming Up..."
+                : `Local Voice Engine Active (Device: ${device.toUpperCase()})`}
             </div>
             <p className="text-xs opacity-80 mt-0.5">
-              {serverOnline
-                ? "Chatterbox zero-shot voice cloning engine is online & ready (RAM & Audio Cache active)."
-                : "Run 'voice-clone-server/start.bat' on your PC to enable local AI voice cloning."}
+              {!serverOnline
+                ? "Run 'start-all.bat' on your PC to launch the local AI voice engine."
+                : !modelLoaded
+                ? `${modelStep || "Loading neural weights into RAM..."} (${modelProgress}% ready)`
+                : "Chatterbox zero-shot voice cloning engine is online & ready (RAM & Audio Cache active)."}
             </p>
+            {serverOnline && !modelLoaded && (
+              <div className="w-full bg-zinc-800/80 rounded-full h-1.5 mt-2 overflow-hidden border border-zinc-700/50">
+                <div
+                  className="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full transition-all duration-500 animate-pulse"
+                  style={{ width: `${Math.max(10, modelProgress)}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -493,7 +532,7 @@ export function VoiceCloneStudio() {
           {serverOnline && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-zinc-800/90 text-purple-300 border border-purple-500/30">
               <Cpu className="w-3 h-3 text-purple-400" />
-              CPU / 16GB RAM
+              {modelLoaded ? "CPU / 16GB RAM" : "Warming Up"}
             </span>
           )}
           <button
@@ -1165,13 +1204,18 @@ export function VoiceCloneStudio() {
             {/* Clone Button */}
             <button
               onClick={handleCloneAndGenerate}
-              disabled={isSynthesizing || serverOnline === false}
+              disabled={isSynthesizing || serverOnline === false || !modelLoaded}
               className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-purple-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 transition cursor-pointer"
             >
               {isSynthesizing ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Synthesizing Cloned Voice ({formatTime(synthesisElapsed)})...
+                </>
+              ) : !modelLoaded && serverOnline ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-300" />
+                  AI Engine Warming Up ({modelProgress}%)...
                 </>
               ) : (
                 <>

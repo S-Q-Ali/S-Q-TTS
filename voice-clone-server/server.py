@@ -10,12 +10,20 @@ Usage:
 """
 
 import os
+import sys
 import io
 import re
 import time
 import uuid
 import shutil
 import hashlib
+
+# Force UTF-8 on Windows consoles to prevent cp1252/charmap UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+os.environ["PYTHONIOENCODING"] = "utf-8"
 from typing import Optional, List
 import torch
 import torchaudio
@@ -331,10 +339,10 @@ async def lifespan(app: FastAPI):
     else:
         DEVICE = "cpu"
 
-    print(f"╔══════════════════════════════════════════╗")
-    print(f"║  S-Q-TTS Voice Clone Server              ║")
-    print(f"║  Target Device: {DEVICE:<25s}║")
-    print(f"╚══════════════════════════════════════════╝")
+    print("============================================")
+    print("  S-Q-TTS Voice Clone Server")
+    print(f"  Target Device: {DEVICE}")
+    print("============================================")
     print("Loading Chatterbox TTS model...")
 
     from chatterbox.tts import ChatterboxTTS

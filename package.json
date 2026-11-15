@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:all": "concurrently -k -n \"AI-ENGINE,NEXTJS\" -c \"magenta.bold,cyan.bold\" \"cd voice-clone-server && venv\\Scripts\\python.exe server.py\" \"next dev\"",
+    "dev:all": "concurrently -k -n \"AI-ENGINE,NEXTJS\" -c \"magenta.bold,cyan.bold\" \"cd voice-clone-server && venv\\Scripts\\python.exe -X utf8 server.py\" \"next dev\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

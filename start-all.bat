@@ -36,7 +36,7 @@ if not exist "%~dp0node_modules" (
 
 :: 3. Check if Python AI Engine is already responding on port 8001
 echo  [1/2] Verifying server ports...
-powershell -NoProfile -Command "try { $res = Invoke-WebRequest -Uri 'http://127.0.0.1:8001/health' -TimeoutSec 1 -UseBasicParsing; if ($res.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
+curl.exe -s -m 1 http://127.0.0.1:8001/health >nul 2>&1
 if not errorlevel 1 goto :fast_connect
 
 :: Server NOT running - release stale port and do full launch
